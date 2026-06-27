@@ -1,6 +1,7 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const { RECORDINGS_DDL, createRecordingsRepo } = require('./recordings');
 
 const dataDir = path.join(__dirname, '..', '..', 'data');
 const dbPath = path.join(dataDir, 'content.db');
@@ -143,6 +144,9 @@ function initSchema() {
         // Column already exists, ignore
     }
 
+    // Recording Sessions
+    db.exec(RECORDINGS_DDL);
+
     console.log('[SQLite] Schema initialized');
 }
 
@@ -212,5 +216,6 @@ const favorites = {
 module.exports = {
     getDb,
     initSchema,
-    favorites
+    favorites,
+    get recordings() { return createRecordingsRepo(getDb()); },
 };

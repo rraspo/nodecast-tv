@@ -1,0 +1,51 @@
+const RECORDINGS_DDL = `
+  CREATE TABLE IF NOT EXISTS recording_sessions (
+    id TEXT PRIMARY KEY,
+    channel_name TEXT NOT NULL,
+    programme_title TEXT,
+    mode TEXT NOT NULL,              -- program | duration | manual
+    status TEXT NOT NULL,            -- recording | moving | pending-move | done | error
+    staging_path TEXT NOT NULL,
+    save_path TEXT NOT NULL,
+    error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ended_at DATETIME
+  );
+  CREATE INDEX IF NOT EXISTS idx_recordings_status ON recording_sessions(status);
+`;
+
+const ACTIVE = ['recording', 'moving', 'pending-move'];
+
+function createRecordingsRepo(db) {
+  return {
+    create(rec) {
+      db.prepare(`INSERT INTO recording_sessions
+        (id, channel_name, programme_title, mode, status, staging_path, save_path)
+        VALUES (@id, @channel_name, @programme_title, @mode, @status, @staging_path, @save_path)`)
+        .run({ programme_title: null, ...rec });
+      return this.get(rec.id);
+    },
+    get(id) {
+      return db.prepare('SELECT * FROM recording_sessions WHERE id = ?').get(id);
+    },
+    list() {
+      return db.prepare('SELECT * FROM recording_sessions ORDER BY created_at DESC').all();
+    },
+    listByState(status) {
+      return db.prepare('SELECT * FROM recording_sessions WHERE status = ?').all(status);
+    },
+    countActive() {
+      const marks = ACTIVE.map(() => '?').join(',');
+      return db.prepare(`SELECT COUNT(*) c FROM recording_sessions WHERE status IN (${marks})`).get(...ACTIVE).c;
+    },
+    setState(id, status, fields = {}) {
+      const sets = ['status = @status'];
+      if ('error' in fields) sets.push('error = @error');
+      if ('ended_at' in fields) sets.push('ended_at = @ended_at');
+      db.prepare(`UPDATE recording_sessions SET ${sets.join(', ')} WHERE id = @id`)
+        .run({ id, status, error: fields.error ?? null, ended_at: fields.ended_at ?? null });
+    },
+  };
+}
+
+module.exports = { RECORDINGS_DDL, createRecordingsRepo };
