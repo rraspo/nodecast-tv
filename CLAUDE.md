@@ -52,6 +52,58 @@ recordings — can exceed the limit. `RECORD_MAX_CONCURRENT` bounds this; exceed
 surfaces a clear error rather than failing silently. The header recording indicator
 makes the active connection cost visible (see UI).
 
+The navbar **connection badge** shows each Xtream provider's `active_cons/max_connections`
+(per source, not summed — limits are per provider), merged with nodecast's own in-flight
+usage (active recordings by `source_id`, transcoded playback by host match) so this box's
+activity is attributed to the right source immediately. A **direct** browser→provider
+playback (compatible streams) holds no server session, so only the provider's (laggy)
+counter sees it — this is what the shared-live-stream feature below resolves.
+
+---
+
+## Feature: Shared live stream — watch + record on one connection (in progress)
+
+**Problem.** Playback and recording each open a *separate* upstream connection. With
+per-channel/per-account provider limits, watching + recording the same channel exceeds the
+limit (403). Playback path also varies by probe result:
+- compatible stream → **direct** browser→provider (no server connection)
+- `needsRemux` → `/api/remux` proxy (1 server upstream)
+- `needsTranscode` → HLS session in `transcode-cache` (1 server upstream)
+
+**Goal.** One upstream connection per `(source, stream)` feeds **both** playback and recording.
+
+**Design — shared live session**, keyed by `sourceId:streamId`:
+- One server ffmpeg pulls the provider once and writes rolling HLS segments to the transcode
+  cache (mechanism already exists). Reuse via `getOrCreateSession` (currently bypassed by the
+  route — see Phase 1).
+- **Playback** loads that session's local m3u8 (already how `needsTranscode` works).
+- **Recording** points its ffmpeg input at the **local** playlist
+  (`127.0.0.1/api/transcode/{id}/stream.m3u8`) with `-c copy` → **zero** extra upstream
+  connections.
+- **Lifecycle:** ref-count viewers + recorders; the session lives while either is attached;
+  existing idle cleanup tears it down after the last detaches. A recording must pin the
+  session alive even if the viewer leaves.
+
+**Quality rule.** Recording from the shared session is lossless only when the session is
+copy/remux (compatible stream). If the session must *transcode* (incompatible codec),
+recording from it captures the re-encoded stream; for lossless, the recording falls back to
+its own direct upstream connection (costs the 2nd connection, preserves quality).
+
+**Phased plan** (each phase shipped + verified before the next):
+1. **Session reuse** (foundation, low risk): `POST /api/transcode/session` keys/dedupes via
+   `getOrCreateSession` on `sourceId:streamId` so N viewers of a channel share one
+   ffmpeg/upstream. No recording change. Verify: two plays of one channel = one session.
+2. **Record-from-session** (the core win): when starting a recording, attach to (or create)
+   the channel's shared session and run the recorder with `-i <local m3u8> -c copy`. Net
+   watch+record = 1 upstream. Fall back to direct upstream when no session exists or a
+   transcoding session can't satisfy the lossless rule.
+3. **Lifecycle + accounting:** ref-count viewers+recorders; keep the session alive for the
+   recording's duration; the connection badge counts a shared session once.
+4. *(Optional, later)* route **all** live playback through sessions for exact connection
+   accounting; this HLS buffer is also the basis for the parked **record-last-X (timeshift)**.
+
+Note: Phases 1–2 change the live playback path — checkpoint before each.
+
 ---
 
 ## Configuration (env)
