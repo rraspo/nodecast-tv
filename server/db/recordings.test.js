@@ -76,6 +76,15 @@ test('setStopAt sets and clears stop_at', () => {
   assert.strictEqual(repo.get('sa1').stop_at, null);
 });
 
+test('setDuration stores duration_ms', () => {
+  const repo = freshRepo();
+  repo.create({ id: 'dur1', channel_name: 'A', mode: 'manual', status: 'done',
+    staging_path: '/s/dur1.ts', save_path: '/r/dur1.ts' });
+  assert.strictEqual(repo.get('dur1').duration_ms, null);
+  repo.setDuration('dur1', 3600000);
+  assert.strictEqual(repo.get('dur1').duration_ms, 3600000);
+});
+
 test('setPaths updates only the provided path columns', () => {
   const repo = freshRepo();
   repo.create({ id: 'sp1', channel_name: 'A', mode: 'manual', status: 'recording',

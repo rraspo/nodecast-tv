@@ -29,6 +29,7 @@ function createMover({
   moveFileFn = moveFile,
   remuxFn = recordFinalize.remuxToMkv,
   mkvPathForFn = recordFinalize.mkvPathFor,
+  probeFn = recordFinalize.probeDurationMs,
 }) {
   let timer = null;
 
@@ -58,6 +59,13 @@ function createMover({
         repo.setPaths(row.id, { save_path: tsSave });
         row.save_path = tsSave;
       }
+    }
+
+    // Probe true media duration (best-effort; never blocks or fails the move).
+    const ms = await probeFn({ file: row.staging_path }).catch(() => null);
+    if (ms) {
+      repo.setDuration(row.id, ms);
+      row.duration_ms = ms;
     }
 
     if (!(await isMountedFn(path.dirname(row.save_path)))) {

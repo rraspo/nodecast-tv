@@ -62,6 +62,36 @@ test('mover: unhealthy dest -> pending-move, retried when healthy', async () => 
   assert.strictEqual(repo.get('m2').status, 'done');
 });
 
+test('mover stores duration_ms via probeFn when probe succeeds', async () => {
+  const dir = tmp();
+  const staging = path.join(dir, 's3.ts');
+  await fsp.writeFile(staging, 'Z');
+  const db = new Database(':memory:'); db.exec(RECORDINGS_DDL);
+  const repo = createRecordingsRepo(db);
+  repo.create({ id: 'm3', channel_name: 'C', mode: 'manual', status: 'recording',
+    staging_path: staging, save_path: path.join(dir, 'dest', 'C.ts') });
+  const probeFn = async () => 42000;
+  const mover = createMover({ repo, config: {}, isMountedFn: async () => true, probeFn });
+  await mover.enqueue('m3');
+  assert.strictEqual(repo.get('m3').status, 'done');
+  assert.strictEqual(repo.get('m3').duration_ms, 42000);
+});
+
+test('mover skips duration when probeFn returns null', async () => {
+  const dir = tmp();
+  const staging = path.join(dir, 's4.ts');
+  await fsp.writeFile(staging, 'W');
+  const db = new Database(':memory:'); db.exec(RECORDINGS_DDL);
+  const repo = createRecordingsRepo(db);
+  repo.create({ id: 'm4', channel_name: 'D', mode: 'manual', status: 'recording',
+    staging_path: staging, save_path: path.join(dir, 'dest', 'D.ts') });
+  const probeFn = async () => null;
+  const mover = createMover({ repo, config: {}, isMountedFn: async () => true, probeFn });
+  await mover.enqueue('m4');
+  assert.strictEqual(repo.get('m4').status, 'done');
+  assert.strictEqual(repo.get('m4').duration_ms, null);
+});
+
 // --- finalize (remux) tests ---
 
 test('mover finalize: .ts staging + .mkv save -> remux called, .ts removed, .mkv moved to dest', async () => {

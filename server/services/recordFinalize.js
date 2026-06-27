@@ -64,4 +64,52 @@ function remuxToMkv({ ffmpegPath = 'ffmpeg', src, dest }) {
   });
 }
 
-module.exports = { mkvPathFor, buildRemuxArgs, remuxToMkv };
+/**
+ * Returns the ffprobe argv for probing the media duration of a file.
+ * Pure function — no I/O.
+ *
+ * @param {string} file - Path to the media file.
+ * @returns {string[]} Argument array for ffprobe.
+ */
+function buildProbeArgs(file) {
+  return ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file];
+}
+
+/**
+ * Parses the stdout from ffprobe (a float-seconds string) into milliseconds.
+ * Pure function — no I/O.
+ *
+ * @param {string} stdout - Raw stdout from ffprobe.
+ * @returns {number|null} Rounded milliseconds, or null if unparseable/N/A/zero.
+ */
+function parseProbeDurationMs(stdout) {
+  const s = String(stdout || '').trim();
+  if (!s || s === 'N/A') return null;
+  const n = parseFloat(s);
+  if (!isFinite(n) || n <= 0) return null;
+  return Math.round(n * 1000);
+}
+
+/**
+ * Spawns ffprobe to determine the true media duration of a file.
+ * Always resolves — never rejects. Returns null on any failure so a probe
+ * error never blocks or breaks the recording finalize/move flow.
+ *
+ * @param {Object} params
+ * @param {string} [params.ffprobePath='ffprobe'] - Path to the ffprobe binary.
+ * @param {string} params.file - Path to the media file to probe.
+ * @returns {Promise<number|null>} Duration in ms, or null on failure.
+ */
+function probeDurationMs({ ffprobePath = 'ffprobe', file }) {
+  return new Promise((resolve) => {
+    let stdout = '';
+    const proc = spawn(ffprobePath, buildProbeArgs(file));
+    proc.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    proc.on('close', (code) => {
+      resolve(code === 0 ? parseProbeDurationMs(stdout) : null);
+    });
+    proc.on('error', () => resolve(null));
+  });
+}
+
+module.exports = { mkvPathFor, buildRemuxArgs, remuxToMkv, buildProbeArgs, parseProbeDurationMs, probeDurationMs };

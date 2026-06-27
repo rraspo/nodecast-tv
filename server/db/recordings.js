@@ -14,7 +14,8 @@ const RECORDINGS_DDL = `
     source_id TEXT,
     source_type TEXT,
     stream_id TEXT,
-    stop_at INTEGER                  -- scheduled stop epoch ms (null = no schedule)
+    stop_at INTEGER,                 -- scheduled stop epoch ms (null = no schedule)
+    duration_ms INTEGER              -- true media duration from ffprobe (null until probed)
   );
   CREATE INDEX IF NOT EXISTS idx_recordings_status ON recording_sessions(status);
 `;
@@ -60,6 +61,9 @@ function createRecordingsRepo(db) {
     },
     setStopAt(id, stopAtMs) {
       db.prepare('UPDATE recording_sessions SET stop_at = ? WHERE id = ?').run(stopAtMs ?? null, id);
+    },
+    setDuration(id, durationMs) {
+      db.prepare('UPDATE recording_sessions SET duration_ms = ? WHERE id = ?').run(durationMs, id);
     },
   };
 }

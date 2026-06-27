@@ -28,6 +28,18 @@ function _fmtElapsed(elapsedMs) {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+/**
+ * Parses a recorded-at timestamp string to epoch ms.
+ * Handles both ISO strings (from ended_at, which include T/Z) and SQLite
+ * CURRENT_TIMESTAMP strings ("YYYY-MM-DD HH:MM:SS", stored as UTC with no Z).
+ */
+function _parseRecTime(s) {
+    if (!s) return NaN;
+    return (s.includes('T') || s.includes('Z'))
+        ? new Date(s).getTime()
+        : new Date(s.replace(' ', 'T') + 'Z').getTime();
+}
+
 // Resolve a HH:MM clock time to the next future epoch ms (today or tomorrow).
 function resolveClockToMs(hh, mm, now) {
     const nowMs = now !== undefined ? now : Date.now();
@@ -195,18 +207,23 @@ class RecordingsPage {
             const name = _recEsc(r.programme_title || r.channel_name || 'Unknown');
             const status = _recEsc(r.status || '');
             const mode = _recEsc(r.mode || '');
-            const created = r.created_at ? new Date(r.created_at).toLocaleString() : '';
+            const createdMs = _parseRecTime(r.created_at);
+            const created = !isNaN(createdMs) ? new Date(createdMs).toLocaleString() : '';
 
-            // Live elapsed timer for recording rows only.
-            // created_at is SQLite CURRENT_TIMESTAMP (UTC, no 'Z'), so append 'Z' before parsing.
+            // Live elapsed timer for actively recording rows only.
             let elapsedHtml = '';
             if (r.status === 'recording' && r.created_at) {
-                const d = new Date(r.created_at.replace(' ', 'T') + 'Z');
-                const startMs = isNaN(d.getTime()) ? null : d.getTime();
-                if (startMs !== null) {
+                const startMs = _parseRecTime(r.created_at);
+                if (!isNaN(startMs)) {
                     elapsedHtml = `<span class="rec-elapsed" data-elapsed-for="${_recEsc(String(r.id))}" data-start-ms="${startMs}">● ${_fmtElapsed(now - startMs)}</span>`;
                 }
             }
+
+            // True media duration shown for finished recordings (probed by ffprobe).
+            // Live recording rows keep the elapsed ticker above — no duration yet.
+            const lengthHtml = r.duration_ms
+                ? `<span class="rec-length">&#8987; ${_fmtElapsed(r.duration_ms)}</span>`
+                : '';
 
             let stopControl = '';
             if (r.status === 'recording') {
@@ -225,6 +242,7 @@ class RecordingsPage {
                 <span class="rec-name">${name}</span>
                 <span class="rec-badge rec-${status}">${status}</span>
                 ${elapsedHtml}
+                ${lengthHtml}
                 ${mode ? `<span class="rec-mode">${mode}</span>` : ''}
                 ${created ? `<span class="rec-time">${created}</span>` : ''}
                 ${stopControl}

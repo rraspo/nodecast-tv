@@ -165,6 +165,14 @@ function initSchema() {
         // Column already exists, ignore
     }
 
+    // Migration: Add media duration column if missing (for existing DBs)
+    try {
+        db.exec(`ALTER TABLE recording_sessions ADD COLUMN duration_ms INTEGER`);
+        console.log('[SQLite] Added duration_ms column to recording_sessions');
+    } catch (e) {
+        // Column already exists, ignore
+    }
+
     console.log('[SQLite] Schema initialized');
 }
 
