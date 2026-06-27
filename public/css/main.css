@@ -4828,10 +4828,26 @@ kbd {
 .record-btn { background: none; border: none; color: inherit; cursor: pointer; opacity: .7; }
 .record-btn:hover { opacity: 1; color: #e53935; }
 
-/* Recording indicator pill + panel (Task 9) */
+/* Recording indicator pill */
 .rec-indicator { position: fixed; top: 12px; right: 16px; z-index: 9998; display: inline-flex; align-items: center; gap: 6px; background: #e53935; color: #fff; border: none; border-radius: 14px; padding: 4px 10px; cursor: pointer; }
-.rec-panel { position: fixed; top: 48px; right: 16px; z-index: 9998; width: 320px; max-height: 60vh; overflow:auto; background: var(--bg-elevated,#1e1e1e); border: 1px solid var(--border,#333); border-radius: 8px; padding: 8px; }
-.rec-panel-head { padding: 6px 8px; opacity:.85; } .rec-panel-head small { opacity:.6; }
-.rec-row { display:flex; align-items:center; gap:8px; padding:6px 8px; }
-.rec-row .rec-name { flex:1; } .rec-status { font-size:.8em; opacity:.8; }
-.rec-pending-move { color:#ffb300; } .rec-empty { padding:12px; opacity:.6; }
+
+/* Recordings page */
+.recordings-header { padding: 24px 24px 12px; border-bottom: 1px solid var(--border, #333); }
+.recordings-header h2 { margin: 0; }
+.recordings-list { padding: 16px 24px; }
+.rec-page-note { font-size: .85em; opacity: .65; margin-bottom: 16px; }
+.rec-list-inner { display: flex; flex-direction: column; gap: 4px; }
+.rec-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 6px; background: var(--bg-elevated, #1e1e1e); }
+.rec-row .rec-name { flex: 1; font-weight: 500; }
+.rec-badge { font-size: .78em; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: rgba(255,255,255,.1); text-transform: uppercase; letter-spacing: .04em; }
+.rec-recording { color: #e53935; background: rgba(229,57,53,.15); }
+.rec-moving { color: #ffb300; background: rgba(255,179,0,.15); }
+.rec-pending-move { color: #ffb300; background: rgba(255,179,0,.15); }
+.rec-completed { color: #43a047; background: rgba(67,160,71,.15); }
+.rec-error { color: #ef5350; background: rgba(239,83,80,.15); }
+.rec-mode { font-size: .8em; opacity: .65; }
+.rec-time { font-size: .8em; opacity: .55; white-space: nowrap; }
+.rec-stop-btn { margin-left: auto; flex-shrink: 0; background: rgba(229,57,53,.2); border: 1px solid rgba(229,57,53,.4); color: #e53935; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-size: .82em; }
+.rec-stop-btn:hover { background: rgba(229,57,53,.35); }
+.rec-stop-btn:disabled { opacity: .45; cursor: not-allowed; }
+.rec-empty { padding: 12px; opacity: .6; }

@@ -31,9 +31,19 @@ window.RecordMenu = {
 
         const rect = anchorEl.getBoundingClientRect();
         menu.style.position = 'fixed';
-        menu.style.top = `${rect.bottom}px`;
-        menu.style.left = `${rect.left}px`;
-        document.body.appendChild(menu);
+        // Append to the fullscreen host so menu is visible in fullscreen mode.
+        const host = document.fullscreenElement || document.body;
+        host.appendChild(menu);
+
+        // Clamp to viewport after measuring rendered size.
+        const mw = menu.offsetWidth;
+        const mh = menu.offsetHeight;
+        const top = (rect.bottom + mh > window.innerHeight)
+            ? Math.max(8, rect.top - mh)
+            : rect.bottom;
+        const left = Math.max(8, Math.min(rect.left, window.innerWidth - mw - 8));
+        menu.style.top = `${top}px`;
+        menu.style.left = `${left}px`;
 
         menu.querySelectorAll('button').forEach(b => b.addEventListener('click', async () => {
             menu.remove();

@@ -20,6 +20,7 @@ class App {
         this.pages.guide = new GuidePage(this);
         this.pages.movies = new MoviesPage(this);
         this.pages.series = new SeriesPage(this);
+        this.pages.recordings = new RecordingsPage(this);
         this.pages.settings = new SettingsPage(this);
         this.pages.watch = new WatchPage(this);
 
