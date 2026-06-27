@@ -160,6 +160,13 @@ const API = {
         getDefaults: () => API.request('GET', '/settings/defaults')
     },
 
+    // Recording (DVR)
+    record: {
+        start: (data) => API.request('POST', '/record/start', data),
+        stop: (id) => API.request('DELETE', `/record/${id}`),
+        list: () => API.request('GET', '/record'),
+    },
+
     // Users (admin only)
     users: {
         getAll: () => API.request('GET', '/auth/users'),
