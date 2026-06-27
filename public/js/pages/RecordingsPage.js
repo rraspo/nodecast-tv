@@ -20,6 +20,14 @@ function _fmtCountdown(stopAtMs, nowMs) {
     return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+function _fmtElapsed(elapsedMs) {
+    const totalSec = Math.floor(Math.max(0, elapsedMs) / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
 // Resolve a HH:MM clock time to the next future epoch ms (today or tomorrow).
 function resolveClockToMs(hh, mm, now) {
     const nowMs = now !== undefined ? now : Date.now();
@@ -73,7 +81,7 @@ class RecordingsPage {
         }
     }
 
-    // Update only the countdown text elements — avoids a full re-render every second.
+    // Update only the countdown and elapsed text elements — avoids a full re-render every second.
     _updateCountdowns() {
         if (!this.list) return;
         const now = Date.now();
@@ -85,6 +93,11 @@ class RecordingsPage {
             } else {
                 el.textContent = `Stopping at ${_fmtTime(stopAt)} (in ${_fmtCountdown(stopAt, now)})`;
             }
+        });
+        this.list.querySelectorAll('.rec-elapsed').forEach(el => {
+            const startMs = parseInt(el.dataset.startMs, 10);
+            if (!startMs) return;
+            el.textContent = `● ${_fmtElapsed(now - startMs)}`;
         });
     }
 
@@ -183,6 +196,18 @@ class RecordingsPage {
             const status = _recEsc(r.status || '');
             const mode = _recEsc(r.mode || '');
             const created = r.created_at ? new Date(r.created_at).toLocaleString() : '';
+
+            // Live elapsed timer for recording rows only.
+            // created_at is SQLite CURRENT_TIMESTAMP (UTC, no 'Z'), so append 'Z' before parsing.
+            let elapsedHtml = '';
+            if (r.status === 'recording' && r.created_at) {
+                const d = new Date(r.created_at.replace(' ', 'T') + 'Z');
+                const startMs = isNaN(d.getTime()) ? null : d.getTime();
+                if (startMs !== null) {
+                    elapsedHtml = `<span class="rec-elapsed" data-elapsed-for="${_recEsc(String(r.id))}" data-start-ms="${startMs}">● ${_fmtElapsed(now - startMs)}</span>`;
+                }
+            }
+
             let stopControl = '';
             if (r.status === 'recording') {
                 const scheduledFuture = r.stop_at && r.stop_at > now;
@@ -199,6 +224,7 @@ class RecordingsPage {
             return `<div class="rec-row${hasChannel ? ' rec-row-clickable' : ''}"${channelAttrs}>
                 <span class="rec-name">${name}</span>
                 <span class="rec-badge rec-${status}">${status}</span>
+                ${elapsedHtml}
                 ${mode ? `<span class="rec-mode">${mode}</span>` : ''}
                 ${created ? `<span class="rec-time">${created}</span>` : ''}
                 ${stopControl}

@@ -4853,3 +4853,4 @@ kbd {
 .rec-empty { padding: 12px; opacity: .6; }
 .rec-row-clickable { cursor: pointer; }
 .rec-row-clickable:hover { background: var(--color-bg-hover, #22222f); }
+.rec-elapsed { font-size: .8em; color: #e53935; font-variant-numeric: tabular-nums; white-space: nowrap; }
