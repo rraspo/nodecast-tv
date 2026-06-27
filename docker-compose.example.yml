@@ -1,0 +1,20 @@
+services:
+  nodecast-tv:
+    image: ghcr.io/technomancer702/nodecast-tv:latest
+    container_name: nodecast-tv
+    ports:
+      - "3000:3000"
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ${RECORD_HOST_PATH}:/recordings   # finished recordings (e.g. a remote/NFS path)
+      - record-staging:/staging           # local fast staging for in-progress recordings
+    devices:
+      - /dev/dri:/dev/dri
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+
+volumes:
+  record-staging:
