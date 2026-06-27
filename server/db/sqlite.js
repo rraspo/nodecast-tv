@@ -157,6 +157,14 @@ function initSchema() {
         }
     });
 
+    // Migration: Add scheduled-stop column if missing (for existing DBs)
+    try {
+        db.exec(`ALTER TABLE recording_sessions ADD COLUMN stop_at INTEGER`);
+        console.log('[SQLite] Added stop_at column to recording_sessions');
+    } catch (e) {
+        // Column already exists, ignore
+    }
+
     console.log('[SQLite] Schema initialized');
 }
 

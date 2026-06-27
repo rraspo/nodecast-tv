@@ -13,7 +13,8 @@ const RECORDINGS_DDL = `
     channel_id TEXT,
     source_id TEXT,
     source_type TEXT,
-    stream_id TEXT
+    stream_id TEXT,
+    stop_at INTEGER                  -- scheduled stop epoch ms (null = no schedule)
   );
   CREATE INDEX IF NOT EXISTS idx_recordings_status ON recording_sessions(status);
 `;
@@ -56,6 +57,9 @@ function createRecordingsRepo(db) {
       if (save_path !== undefined) { sets.push('save_path = @save_path'); params.save_path = save_path; }
       if (sets.length === 0) return;
       db.prepare(`UPDATE recording_sessions SET ${sets.join(', ')} WHERE id = @id`).run(params);
+    },
+    setStopAt(id, stopAtMs) {
+      db.prepare('UPDATE recording_sessions SET stop_at = ? WHERE id = ?').run(stopAtMs ?? null, id);
     },
   };
 }

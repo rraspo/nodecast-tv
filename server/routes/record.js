@@ -18,6 +18,17 @@ function shouldMove(sessionStatus) {
   return sessionStatus !== 'error';
 }
 
+// Pure helper: validate and clamp a scheduled-stop epoch ms value.
+// Returns { ok: false } for non-finite input.
+// Past timestamps resolve to nowMs (stop immediately).
+// Future timestamps beyond maxMs are clamped to nowMs + maxMs.
+function clampStopAt(stopAtMs, nowMs, maxMs = 24 * 60 * 60 * 1000) {
+  if (!Number.isFinite(stopAtMs)) return { ok: false };
+  if (stopAtMs <= nowMs) return { ok: true, stopAtMs: nowMs };
+  if (stopAtMs - nowMs > maxMs) return { ok: true, stopAtMs: nowMs + maxMs };
+  return { ok: true, stopAtMs };
+}
+
 function canStart(repo, config) {
   if (repo.countActive() >= config.maxConcurrent) return { ok: false, reason: 'max-concurrent' };
   return { ok: true };
@@ -44,7 +55,22 @@ function resolveStart(body, config = recordConfig, nowMs = Date.now()) {
 // Mover is created lazily so the repo (and thus DB) is only touched at runtime, not on require.
 let mover = null;
 function getMover() {
-  if (!mover) { mover = createMover({ repo: dbSqlite.recordings, config: recordConfig }); mover.start(); }
+  if (!mover) {
+    mover = createMover({ repo: dbSqlite.recordings, config: recordConfig });
+    mover.start();
+    // Safety reaper: backstop for any scheduled stop whose setTimeout was lost (e.g. restart).
+    // Scans live sessions every 30s; if the persisted stop_at is due, calls session.stop().
+    const reaper = setInterval(() => {
+      const now = Date.now();
+      for (const session of recordSvc.getAllSessions()) {
+        const row = dbSqlite.recordings.get(session.id);
+        if (row && row.stop_at && row.stop_at <= now) {
+          session.stop();
+        }
+      }
+    }, 30000);
+    reaper.unref();
+  }
   return mover;
 }
 
@@ -126,9 +152,40 @@ router.post('/start', auth.requireAuth, async (req, res) => {
   }
 });
 
+router.post('/:id/schedule-stop', auth.requireAuth, (req, res) => {
+  const { id } = req.params;
+  const session = recordSvc.getSession(id);
+  if (!session) return res.status(404).json({ error: 'No active recording session' });
+
+  const repo = dbSqlite.recordings;
+  const { stopAtMs } = req.body;
+
+  // null -> cancel any existing schedule
+  if (stopAtMs === null) {
+    session.cancelScheduledStop();
+    repo.setStopAt(id, null);
+    return res.json({ canceled: true });
+  }
+
+  const now = Date.now();
+  const clamped = clampStopAt(stopAtMs, now);
+  if (!clamped.ok) return res.status(400).json({ error: 'stopAtMs must be a finite number' });
+
+  if (clamped.stopAtMs <= now) {
+    session.stop();
+    repo.setStopAt(id, null);
+    return res.json({ stopped: true });
+  }
+
+  session.scheduleStop(clamped.stopAtMs);
+  repo.setStopAt(id, clamped.stopAtMs);
+  return res.json({ stopAtMs: clamped.stopAtMs });
+});
+
 router.delete('/:id', auth.requireAuth, (req, res) => {
   const session = recordSvc.getSession(req.params.id);
   if (session) session.stop();
+  dbSqlite.recordings.setStopAt(req.params.id, null);
   res.json({ ok: true });
 });
 
@@ -137,3 +194,4 @@ module.exports.canStart = canStart;
 module.exports.resolveStart = resolveStart;
 module.exports.getMover = getMover;
 module.exports.shouldMove = shouldMove;
+module.exports.clampStopAt = clampStopAt;

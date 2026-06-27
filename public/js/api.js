@@ -165,6 +165,7 @@ const API = {
         start: (data) => API.request('POST', '/record/start', data),
         stop: (id) => API.request('DELETE', `/record/${id}`),
         list: () => API.request('GET', '/record'),
+        scheduleStop: (id, stopAtMs) => API.request('POST', `/record/${id}/schedule-stop`, { stopAtMs }),
     },
 
     // Users (admin only)

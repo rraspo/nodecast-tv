@@ -53,6 +53,7 @@ class RecordSession extends EventEmitter {
     this.status = 'pending';
     this.error = null;
     this.process = null;
+    this._stopTimer = null;
   }
 
   async start() {
@@ -75,7 +76,22 @@ class RecordSession extends EventEmitter {
     });
   }
 
+  scheduleStop(atMs) {
+    this.cancelScheduledStop();
+    const delay = Math.max(0, atMs - Date.now());
+    this._stopTimer = setTimeout(() => this.stop(), delay);
+    this._stopTimer.unref();
+  }
+
+  cancelScheduledStop() {
+    if (this._stopTimer) {
+      clearTimeout(this._stopTimer);
+      this._stopTimer = null;
+    }
+  }
+
   stop() {
+    this.cancelScheduledStop();
     if (this.process) {
       this.process.kill('SIGTERM');
       setTimeout(() => { if (this.process) this.process.kill('SIGKILL'); }, 2000);

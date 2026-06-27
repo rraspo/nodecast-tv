@@ -66,6 +66,16 @@ test('create defaults channel identity fields to null when absent', () => {
   assert.strictEqual(row.stream_id, null);
 });
 
+test('setStopAt sets and clears stop_at', () => {
+  const repo = freshRepo();
+  repo.create({ id: 'sa1', channel_name: 'A', mode: 'manual', status: 'recording',
+    staging_path: '/s/sa1.ts', save_path: '/r/sa1.ts' });
+  repo.setStopAt('sa1', 1_700_000_000_000);
+  assert.strictEqual(repo.get('sa1').stop_at, 1_700_000_000_000);
+  repo.setStopAt('sa1', null);
+  assert.strictEqual(repo.get('sa1').stop_at, null);
+});
+
 test('setPaths updates only the provided path columns', () => {
   const repo = freshRepo();
   repo.create({ id: 'sp1', channel_name: 'A', mode: 'manual', status: 'recording',
