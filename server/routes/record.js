@@ -4,6 +4,7 @@ const fsp = require('fs').promises;
 const router = express.Router();
 
 const auth = require('../auth');
+const db = require('../db');
 const { recordConfig } = require('../recordConfig');
 const dbSqlite = require('../db/sqlite');
 const recordSvc = require('../services/recordSession');
@@ -64,9 +65,14 @@ router.post('/start', auth.requireAuth, async (req, res) => {
     const parsed = resolveStart(req.body, recordConfig);
     if (!parsed.ok) return res.status(400).json({ error: 'url and a valid mode (program|duration|manual) are required' });
 
+    // Use the user's configured User-Agent (same as the transcode/remux playback paths).
+    // Providers 403 a generic UA, so recording must match what playback sends.
+    const settings = await db.settings.get();
+    const userAgent = db.getUserAgent(settings);
+
     session = recordSvc.createRecordSession({
       url: parsed.value.url,
-      userAgent: 'Mozilla/5.0',
+      userAgent,
       durationSec: parsed.value.durationSec,
       stagingDir: recordConfig.stagingPath,
       fileBase: parsed.value.fileBase,
