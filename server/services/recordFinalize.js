@@ -105,6 +105,9 @@ function probeDurationMs({ ffprobePath = 'ffprobe', file }) {
     let stdout = '';
     const proc = spawn(ffprobePath, buildProbeArgs(file));
     proc.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    // Drain stderr so a large error dump can't fill the pipe buffer and block
+    // the child from exiting (which would hang the mover's finalize/move).
+    proc.stderr.on('data', () => {});
     proc.on('close', (code) => {
       resolve(code === 0 ? parseProbeDurationMs(stdout) : null);
     });

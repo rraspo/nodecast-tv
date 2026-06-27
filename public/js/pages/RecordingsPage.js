@@ -222,7 +222,7 @@ class RecordingsPage {
             // True media duration shown for finished recordings (probed by ffprobe).
             // Live recording rows keep the elapsed ticker above — no duration yet.
             const lengthHtml = r.duration_ms
-                ? `<span class="rec-length">&#8987; ${_fmtElapsed(r.duration_ms)}</span>`
+                ? `<span class="rec-length">&#9201; ${_fmtElapsed(r.duration_ms)}</span>`
                 : '';
 
             let stopControl = '';
