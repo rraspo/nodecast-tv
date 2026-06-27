@@ -4898,3 +4898,9 @@ kbd {
 .rec-remux, .rec-remux-all { flex-shrink: 0; }
 .rec-row-failed { align-items: flex-start; flex-wrap: wrap; }
 .rec-error-detail { flex-basis: 100%; margin: 6px 0 0; padding: 8px 10px; border-radius: 4px; background: rgba(0,0,0,.35); color: #ef9a9a; font-size: .78em; white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto; }
+.rec-error-summary { font-size: .82em; opacity: .85; flex-basis: 100%; }
+.rec-page-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.rec-page-head .rec-page-note { margin-bottom: 0; flex: 1; }
+.rec-page-head .rec-scan { flex-shrink: 0; }
+.rec-missing { color: #e53935; background: rgba(229,57,53,.15); }
+.rec-locate { flex-shrink: 0; }

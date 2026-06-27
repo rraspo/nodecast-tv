@@ -106,6 +106,48 @@ router.get('/', auth.requireAuth, (req, res) => {
   res.json(rows);
 });
 
+// Recursively list files under a directory (best-effort; returns [] on any error).
+async function walkFiles(dir) {
+  const out = [];
+  let entries;
+  try { entries = await fsp.readdir(dir, { withFileTypes: true }); } catch { return out; }
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) out.push(...await walkFiles(full));
+    else out.push(full);
+  }
+  return out;
+}
+
+// Scan finished recordings and report which save_path files no longer exist on disk
+// (e.g. moved/renamed/deleted outside the app).
+router.post('/scan', auth.requireAuth, async (req, res) => {
+  const rows = dbSqlite.recordings.list().filter(r => r.status === 'done');
+  const results = [];
+  for (const r of rows) {
+    const exists = await fsp.access(r.save_path).then(() => true).catch(() => false);
+    results.push({ id: r.id, exists });
+  }
+  res.json({ results, missing: results.filter(x => !x.exists).map(x => x.id) });
+});
+
+// Try to relocate a recording whose file went stale: search the save root for a file
+// with the same basename stem (preferring .mkv) and repoint save_path to it.
+router.post('/:id/locate', auth.requireAuth, async (req, res) => {
+  const repo = dbSqlite.recordings;
+  const row = repo.get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Recording not found' });
+  if (await fsp.access(row.save_path).then(() => true).catch(() => false)) {
+    return res.json({ found: true, save_path: row.save_path, unchanged: true });
+  }
+  const stem = recordFinalize.recordingStem(row.save_path);
+  const files = await walkFiles(recordConfig.savePath);
+  const match = recordFinalize.pickRelocated(stem, files);
+  if (!match) return res.json({ found: false });
+  repo.setPaths(row.id, { save_path: match });
+  res.json({ found: true, save_path: match });
+});
+
 // Remux all finished .ts recordings to .mkv in place. Runs in the background
 // (sequential, NFS-bound); the client polls GET /record to see rows convert.
 router.post('/remux-all', auth.requireAuth, (req, res) => {

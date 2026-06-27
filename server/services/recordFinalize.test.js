@@ -2,7 +2,28 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { mkvPathFor, buildRemuxArgs, buildProbeArgs, parseProbeDurationMs, isUnremuxed } = require('./recordFinalize');
+const { mkvPathFor, buildRemuxArgs, buildProbeArgs, parseProbeDurationMs, isUnremuxed, recordingStem, pickRelocated } = require('./recordFinalize');
+
+test('recordingStem: strips directory and extension', () => {
+  assert.strictEqual(recordingStem('/recordings/Show - 2026-01-01_10-00-00.ts'), 'Show - 2026-01-01_10-00-00');
+  assert.strictEqual(recordingStem('/r/a.mkv'), 'a');
+  assert.strictEqual(recordingStem('noext'), 'noext');
+});
+
+test('pickRelocated: matches by stem, prefers .mkv', () => {
+  const stem = 'Show - 2026-01-01_10-00-00';
+  const paths = [
+    '/recordings/other.ts',
+    '/recordings/sub/Show - 2026-01-01_10-00-00.ts',
+    '/recordings/sub/Show - 2026-01-01_10-00-00.mkv',
+  ];
+  assert.strictEqual(pickRelocated(stem, paths), '/recordings/sub/Show - 2026-01-01_10-00-00.mkv');
+});
+
+test('pickRelocated: returns null when nothing matches', () => {
+  assert.strictEqual(pickRelocated('nope', ['/r/a.ts', '/r/b.mkv']), null);
+  assert.strictEqual(pickRelocated('x', []), null);
+});
 
 test('isUnremuxed: true only for done .ts recordings', () => {
   assert.strictEqual(isUnremuxed({ status: 'done', save_path: '/r/a.ts' }), true);

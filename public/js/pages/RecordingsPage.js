@@ -40,6 +40,20 @@ function _parseRecTime(s) {
         : new Date(s.replace(' ', 'T') + 'Z').getTime();
 }
 
+// Translate a raw ffmpeg/record error into a plain-language explanation.
+function _explainRecError(raw) {
+    const t = String(raw || '');
+    if (/\b403\b|Forbidden/i.test(t)) return 'Provider refused the connection (HTTP 403). Usually the per-channel/account connection limit, an expired link, or a blocked User-Agent.';
+    if (/\b401\b|Unauthorized/i.test(t)) return 'Authentication failed (HTTP 401) — the source credentials may be wrong or expired.';
+    if (/\b404\b|Not Found/i.test(t)) return 'Stream not found (HTTP 404) — the channel link likely changed or expired.';
+    if (/Server returned 5\d\d|\b50\d\b/i.test(t)) return 'The provider had a server error (HTTP 5xx). Often temporary — try again.';
+    if (/Connection refused|Connection timed out|timed out|No route to host|Network is unreachable|Failed to resolve/i.test(t)) return 'Could not reach the provider (network/connection error).';
+    if (/Invalid data found|moov atom not found|Invalid argument|could not find codec/i.test(t)) return 'The stream data was corrupt or not a valid media stream.';
+    if (/No space left/i.test(t)) return 'The disk is full — free up space and try again.';
+    if (/ffmpeg exited/i.test(t)) return 'ffmpeg stopped unexpectedly. Expand details for the exact error.';
+    return 'Recording failed. Expand details for the exact error.';
+}
+
 // Resolve a HH:MM clock time to the next future epoch ms (today or tomorrow).
 function resolveClockToMs(hh, mm, now) {
     const nowMs = now !== undefined ? now : Date.now();
@@ -55,6 +69,10 @@ class RecordingsPage {
         this.list = document.getElementById('recordings-list');
         this.pollInterval = null;
         this._countdownInterval = null;
+        // Open accordion ids + scan-detected missing ids. In-memory only (not persisted),
+        // so an open error detail survives the 7s poll re-render instead of snapping shut.
+        this._expanded = new Set();
+        this._missing = new Set();
         this.init();
     }
 
@@ -247,12 +265,18 @@ class RecordingsPage {
             </div>`;
         };
 
+        // "File missing" badge + Locate button, shown after a scan flags the file as gone.
+        const missingOf = (r) => {
+            if (!this._missing.has(String(r.id))) return '';
+            return `<span class="rec-badge rec-missing">file missing</span><button class="btn btn-sm rec-locate" data-id="${_recEsc(String(r.id))}">Locate</button>`;
+        };
+
         // Final recording row (.mkv).
         const finalRow = (r) => {
             const c = chan(r);
             return `<div class="rec-row${c.cls}"${c.attrs}>
                 <span class="rec-name">${nameOf(r)}</span>
-                ${lengthOf(r)}${modeOf(r)}${createdOf(r)}
+                ${lengthOf(r)}${modeOf(r)}${createdOf(r)}${missingOf(r)}
             </div>`;
         };
 
@@ -266,22 +290,28 @@ class RecordingsPage {
             return `<div class="rec-row${c.cls}"${c.attrs}>
                 <span class="rec-name">${nameOf(r)}</span>
                 <span class="rec-badge rec-ts">.ts</span>
-                ${lengthOf(r)}${modeOf(r)}${createdOf(r)}${remuxCtl}
+                ${lengthOf(r)}${modeOf(r)}${createdOf(r)}${missingOf(r)}${remuxCtl}
             </div>`;
         };
 
-        // Failed row, with an expandable error detail.
+        // Failed row: plain-language explanation always visible, raw ffmpeg output
+        // in an accordion whose open state is kept in this._expanded so the 7s poll
+        // re-render does not snap it shut.
         const failedRow = (r) => {
             const id = _recEsc(String(r.id));
+            const open = this._expanded.has(String(r.id));
             const hasError = !!r.error;
+            const explain = `<span class="rec-error-summary">${_recEsc(_explainRecError(r.error))}</span>`;
             const detail = hasError
-                ? `<button class="btn btn-sm rec-error-toggle" data-id="${id}">Details &#9660;</button>
-                   <pre class="rec-error-detail" id="rec-err-${id}" style="display:none">${_recEsc(r.error)}</pre>`
+                ? `<button class="btn btn-sm rec-error-toggle" data-id="${id}">Details ${open ? '&#9650;' : '&#9660;'}</button>
+                   <pre class="rec-error-detail" id="rec-err-${id}" style="display:${open ? 'block' : 'none'}">${_recEsc(r.error)}</pre>`
                 : '';
             return `<div class="rec-row rec-row-failed">
                 <span class="rec-name">${nameOf(r)}</span>
                 <span class="rec-badge rec-error">error</span>
-                ${modeOf(r)}${createdOf(r)}${detail}
+                ${modeOf(r)}${createdOf(r)}
+                ${explain}
+                ${detail}
             </div>`;
         };
 
@@ -297,7 +327,10 @@ class RecordingsPage {
             ? `<button class="btn btn-sm rec-remux-all">Remux all</button>` : '';
 
         this.list.innerHTML = `
-            <p class="rec-page-note">Each recording uses one of your IPTV provider's connections.</p>
+            <div class="rec-page-head">
+                <p class="rec-page-note">Each recording uses one of your IPTV provider's connections.</p>
+                <button class="btn btn-sm rec-scan" title="Check that recording files still exist on disk">Scan files</button>
+            </div>
             ${section('In progress', inProgress, progressRow)}
             ${section('Recordings', finished, finalRow)}
             ${section('Unremuxed (.ts)', unremuxed, unremuxedRow, remuxAllBtn)}
@@ -339,8 +372,54 @@ class RecordingsPage {
         this.list.querySelectorAll('.rec-error-toggle').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const pre = document.getElementById(`rec-err-${btn.dataset.id}`);
-                if (pre) pre.style.display = pre.style.display === 'none' ? 'block' : 'none';
+                const id = btn.dataset.id;
+                const open = !this._expanded.has(id);
+                if (open) this._expanded.add(id); else this._expanded.delete(id);
+                const pre = document.getElementById(`rec-err-${id}`);
+                if (pre) pre.style.display = open ? 'block' : 'none';
+                btn.innerHTML = `Details ${open ? '&#9650;' : '&#9660;'}`;
+            });
+        });
+
+        const scanBtn = this.list.querySelector('.rec-scan');
+        if (scanBtn) {
+            scanBtn.addEventListener('click', async () => {
+                scanBtn.disabled = true;
+                scanBtn.textContent = 'Scanning…';
+                try {
+                    const res = await API.record.scan();
+                    this._missing = new Set((res.missing || []).map(String));
+                    const n = this._missing.size;
+                    this._load();
+                    if (n === 0) alert('All recording files are present.');
+                } catch (err) {
+                    alert(err.message || 'Scan failed');
+                    scanBtn.disabled = false;
+                    scanBtn.textContent = 'Scan files';
+                }
+            });
+        }
+
+        this.list.querySelectorAll('.rec-locate').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                btn.disabled = true;
+                btn.textContent = 'Locating…';
+                try {
+                    const res = await API.record.locate(btn.dataset.id);
+                    if (res.found) {
+                        this._missing.delete(String(btn.dataset.id));
+                        window.dispatchEvent(new CustomEvent('recordings-changed'));
+                    } else {
+                        alert('No matching file found on disk.');
+                        btn.disabled = false;
+                        btn.textContent = 'Locate';
+                    }
+                } catch (err) {
+                    alert(err.message || 'Locate failed');
+                    btn.disabled = false;
+                    btn.textContent = 'Locate';
+                }
             });
         });
 
@@ -367,7 +446,7 @@ class RecordingsPage {
 
         this.list.querySelectorAll('.rec-row-clickable').forEach(row => {
             row.addEventListener('click', (e) => {
-                if (e.target.closest('.rec-stop-toggle, .rec-cancel-sched, .rec-remux, .rec-remux-all, .rec-error-toggle')) return;
+                if (e.target.closest('.rec-stop-toggle, .rec-cancel-sched, .rec-remux, .rec-remux-all, .rec-error-toggle, .rec-locate')) return;
                 const { channelId, sourceId, sourceType, streamId } = row.dataset;
                 try {
                     window.app.navigateTo('live');

@@ -127,4 +127,29 @@ function isUnremuxed(row) {
   return !!row && row.status === 'done' && typeof row.save_path === 'string' && row.save_path.endsWith('.ts');
 }
 
-module.exports = { mkvPathFor, buildRemuxArgs, remuxToMkv, buildProbeArgs, parseProbeDurationMs, probeDurationMs, isUnremuxed };
+/**
+ * The basename of a path without its extension. Pure function.
+ * @param {string} p
+ * @returns {string}
+ */
+function recordingStem(p) {
+  const base = String(p || '').split('/').pop();
+  return base.replace(/\.[^.]+$/, '');
+}
+
+/**
+ * Pick the best on-disk candidate for a recording whose original path went stale.
+ * Matches by basename stem (case-insensitive), preferring .mkv over .ts. Pure function.
+ * @param {string} stem - The expected basename stem (no extension).
+ * @param {string[]} paths - Candidate file paths to search.
+ * @returns {string|null} The matched path, or null if none match.
+ */
+function pickRelocated(stem, paths) {
+  const want = String(stem || '').toLowerCase();
+  const matches = (paths || []).filter(p => recordingStem(p).toLowerCase() === want);
+  if (!matches.length) return null;
+  matches.sort((a, b) => (b.endsWith('.mkv') ? 1 : 0) - (a.endsWith('.mkv') ? 1 : 0));
+  return matches[0];
+}
+
+module.exports = { mkvPathFor, buildRemuxArgs, remuxToMkv, buildProbeArgs, parseProbeDurationMs, probeDurationMs, isUnremuxed, recordingStem, pickRelocated };
