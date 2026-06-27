@@ -2,7 +2,17 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { mkvPathFor, buildRemuxArgs, buildProbeArgs, parseProbeDurationMs, isUnremuxed, recordingStem, pickRelocated } = require('./recordFinalize');
+const { mkvPathFor, buildRemuxArgs, buildProbeArgs, parseProbeDurationMs, isUnremuxed, recordingStem, pickRelocated, isWithinRoot } = require('./recordFinalize');
+
+test('isWithinRoot: allows root and descendants, blocks traversal', () => {
+  assert.strictEqual(isWithinRoot('/recordings', '/recordings'), true);
+  assert.strictEqual(isWithinRoot('/recordings', '/recordings/a.mkv'), true);
+  assert.strictEqual(isWithinRoot('/recordings', '/recordings/sub/a.mkv'), true);
+  assert.strictEqual(isWithinRoot('/recordings/', '/recordings/a.mkv'), true);
+  assert.strictEqual(isWithinRoot('/recordings', '/etc/passwd'), false);
+  assert.strictEqual(isWithinRoot('/recordings', '/recordings-evil/a'), false);
+  assert.strictEqual(isWithinRoot('', '/x'), false);
+});
 
 test('recordingStem: strips directory and extension', () => {
   assert.strictEqual(recordingStem('/recordings/Show - 2026-01-01_10-00-00.ts'), 'Show - 2026-01-01_10-00-00');

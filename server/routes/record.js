@@ -119,6 +119,42 @@ async function walkFiles(dir) {
   return out;
 }
 
+// Browse the recordings root for the Locate file picker. Constrained to savePath
+// (no path traversal): returns directories and files for the requested dir.
+router.get('/browse', auth.requireAuth, async (req, res) => {
+  const root = path.resolve(recordConfig.savePath);
+  const dir = req.query.dir ? path.resolve(req.query.dir) : root;
+  if (!recordFinalize.isWithinRoot(root, dir)) return res.status(400).json({ error: 'Path outside recordings root' });
+  let entries;
+  try { entries = await fsp.readdir(dir, { withFileTypes: true }); }
+  catch { return res.status(404).json({ error: 'Cannot read directory' }); }
+  const items = [];
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) { items.push({ name: e.name, path: full, type: 'dir' }); }
+    else if (e.isFile()) {
+      const size = await fsp.stat(full).then(s => s.size).catch(() => null);
+      items.push({ name: e.name, path: full, type: 'file', size });
+    }
+  }
+  items.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : (a.type === 'dir' ? -1 : 1)));
+  res.json({ root, dir, parent: dir === root ? null : path.dirname(dir), entries: items });
+});
+
+// Manually re-point a recording at a file the user selected in the picker.
+router.post('/:id/relocate', auth.requireAuth, async (req, res) => {
+  const repo = dbSqlite.recordings;
+  const row = repo.get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Recording not found' });
+  const root = path.resolve(recordConfig.savePath);
+  const target = req.body && req.body.path ? path.resolve(req.body.path) : null;
+  if (!target || !recordFinalize.isWithinRoot(root, target)) return res.status(400).json({ error: 'Invalid path' });
+  const isFile = await fsp.stat(target).then(s => s.isFile()).catch(() => false);
+  if (!isFile) return res.status(400).json({ error: 'Not a file' });
+  repo.setPaths(row.id, { save_path: target });
+  res.json({ ok: true, save_path: target });
+});
+
 // Scan finished recordings and report which save_path files no longer exist on disk
 // (e.g. moved/renamed/deleted outside the app).
 router.post('/scan', auth.requireAuth, async (req, res) => {

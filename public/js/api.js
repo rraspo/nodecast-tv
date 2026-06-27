@@ -171,6 +171,8 @@ const API = {
         remuxAll: () => API.request('POST', '/record/remux-all'),
         scan: () => API.request('POST', '/record/scan'),
         locate: (id) => API.request('POST', `/record/${id}/locate`),
+        browse: (dir) => API.request('GET', `/record/browse${dir ? `?dir=${encodeURIComponent(dir)}` : ''}`),
+        relocate: (id, path) => API.request('POST', `/record/${id}/relocate`, { path }),
     },
 
     // Users (admin only)

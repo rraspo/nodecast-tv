@@ -54,6 +54,14 @@ function _explainRecError(raw) {
     return 'Recording failed. Expand details for the exact error.';
 }
 
+function _fmtBytes(n) {
+    if (!n) return '';
+    const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0, v = n;
+    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+    return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${u[i]}`;
+}
+
 // Resolve a HH:MM clock time to the next future epoch ms (today or tomorrow).
 function resolveClockToMs(hh, mm, now) {
     const nowMs = now !== undefined ? now : Date.now();
@@ -95,8 +103,63 @@ class RecordingsPage {
         this.pollInterval = null;
         clearInterval(this._countdownInterval);
         this._countdownInterval = null;
-        // Close any open stop-schedule menu
+        // Close any open stop-schedule menu / file picker
         document.querySelector('.stop-schedule-menu')?.remove();
+        document.querySelector('.fs-picker-overlay')?.remove();
+    }
+
+    // Small filesystem explorer to manually re-point a recording at a file on disk,
+    // constrained server-side to the recordings root.
+    _openFilePicker(recordingId) {
+        document.querySelector('.fs-picker-overlay')?.remove();
+        const overlay = document.createElement('div');
+        overlay.className = 'fs-picker-overlay';
+        overlay.innerHTML = `
+            <div class="fs-picker">
+                <div class="fs-picker-head">
+                    <span class="fs-picker-title">Select recording file</span>
+                    <button class="fs-picker-close" title="Close">&times;</button>
+                </div>
+                <div class="fs-picker-path"></div>
+                <div class="fs-picker-list">Loading…</div>
+            </div>`;
+        document.body.appendChild(overlay);
+
+        const pathEl = overlay.querySelector('.fs-picker-path');
+        const listEl = overlay.querySelector('.fs-picker-list');
+        const close = () => overlay.remove();
+        overlay.querySelector('.fs-picker-close').addEventListener('click', close);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+        const load = async (dir) => {
+            listEl.textContent = 'Loading…';
+            let data;
+            try { data = await API.record.browse(dir); }
+            catch (err) { listEl.textContent = err.message || 'Failed to read directory'; return; }
+            pathEl.textContent = data.dir;
+            const rows = [];
+            if (data.parent) rows.push(`<div class="fs-item fs-dir" data-dir="${_recEsc(data.parent)}">&#128193; ..</div>`);
+            for (const e of data.entries) {
+                if (e.type === 'dir') {
+                    rows.push(`<div class="fs-item fs-dir" data-dir="${_recEsc(e.path)}">&#128193; ${_recEsc(e.name)}</div>`);
+                } else {
+                    rows.push(`<div class="fs-item fs-file" data-file="${_recEsc(e.path)}">&#127916; ${_recEsc(e.name)}${e.size ? `<span class="fs-size">${_fmtBytes(e.size)}</span>` : ''}</div>`);
+                }
+            }
+            listEl.innerHTML = rows.join('') || '<div class="fs-empty">Empty folder</div>';
+            listEl.querySelectorAll('.fs-dir').forEach(el => el.addEventListener('click', () => load(el.dataset.dir)));
+            listEl.querySelectorAll('.fs-file').forEach(el => el.addEventListener('click', async () => {
+                try {
+                    await API.record.relocate(recordingId, el.dataset.file);
+                    this._missing.delete(String(recordingId));
+                    close();
+                    window.dispatchEvent(new CustomEvent('recordings-changed'));
+                } catch (err) {
+                    alert(err.message || 'Failed to set file');
+                }
+            }));
+        };
+        load();
     }
 
     async _load() {
@@ -268,7 +331,7 @@ class RecordingsPage {
         // "File missing" badge + Locate button, shown after a scan flags the file as gone.
         const missingOf = (r) => {
             if (!this._missing.has(String(r.id))) return '';
-            return `<span class="rec-badge rec-missing">file missing</span><button class="btn btn-sm rec-locate" data-id="${_recEsc(String(r.id))}">Locate</button>`;
+            return `<span class="rec-badge rec-missing">file missing</span><button class="btn btn-sm rec-locate" data-id="${_recEsc(String(r.id))}">Locate…</button>`;
         };
 
         // Final recording row (.mkv).
@@ -401,25 +464,9 @@ class RecordingsPage {
         }
 
         this.list.querySelectorAll('.rec-locate').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
+            btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                btn.disabled = true;
-                btn.textContent = 'Locating…';
-                try {
-                    const res = await API.record.locate(btn.dataset.id);
-                    if (res.found) {
-                        this._missing.delete(String(btn.dataset.id));
-                        window.dispatchEvent(new CustomEvent('recordings-changed'));
-                    } else {
-                        alert('No matching file found on disk.');
-                        btn.disabled = false;
-                        btn.textContent = 'Locate';
-                    }
-                } catch (err) {
-                    alert(err.message || 'Locate failed');
-                    btn.disabled = false;
-                    btn.textContent = 'Locate';
-                }
+                this._openFilePicker(btn.dataset.id);
             });
         });
 

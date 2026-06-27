@@ -152,4 +152,18 @@ function pickRelocated(stem, paths) {
   return matches[0];
 }
 
-module.exports = { mkvPathFor, buildRemuxArgs, remuxToMkv, buildProbeArgs, parseProbeDurationMs, probeDurationMs, isUnremuxed, recordingStem, pickRelocated };
+/**
+ * True if `target` is the root itself or lies inside it. Pure string check;
+ * callers must pass already-resolved absolute POSIX paths. Guards the file
+ * browser against escaping the recordings root (path traversal).
+ * @param {string} root
+ * @param {string} target
+ * @returns {boolean}
+ */
+function isWithinRoot(root, target) {
+  if (!root || !target) return false;
+  const r = String(root).replace(/\/+$/, '');
+  return target === r || target.startsWith(r + '/');
+}
+
+module.exports = { mkvPathFor, buildRemuxArgs, remuxToMkv, buildProbeArgs, parseProbeDurationMs, probeDurationMs, isUnremuxed, recordingStem, pickRelocated, isWithinRoot };
