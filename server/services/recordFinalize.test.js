@@ -2,7 +2,16 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { mkvPathFor, buildRemuxArgs, buildProbeArgs, parseProbeDurationMs, isUnremuxed, recordingStem, pickRelocated, isWithinRoot } = require('./recordFinalize');
+const { mkvPathFor, buildRemuxArgs, parseProgressMs, buildProbeArgs, parseProbeDurationMs, isUnremuxed, recordingStem, pickRelocated, isWithinRoot } = require('./recordFinalize');
+
+test('parseProgressMs: extracts last out_time as ms', () => {
+  assert.strictEqual(parseProgressMs('out_time=00:00:12.500000\nprogress=continue'), 12500);
+  assert.strictEqual(parseProgressMs('out_time=01:02:03.000000'), 3723000);
+  // last wins when multiple blocks arrive in one chunk
+  assert.strictEqual(parseProgressMs('out_time=00:00:01.000000\nout_time=00:00:05.000000'), 5000);
+  assert.strictEqual(parseProgressMs('frame=1\nfps=0'), null);
+  assert.strictEqual(parseProgressMs(''), null);
+});
 
 test('isWithinRoot: allows root and descendants, blocks traversal', () => {
   assert.strictEqual(isWithinRoot('/recordings', '/recordings'), true);

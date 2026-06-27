@@ -21,6 +21,7 @@ function mkvPathFor(tsPath) {
 function buildRemuxArgs({ src, dest }) {
   return [
     '-hide_banner', '-loglevel', 'warning',
+    '-progress', 'pipe:1', '-nostats',
     '-i', src,
     '-map', '0:v?',
     '-map', '0:a?',
@@ -28,6 +29,20 @@ function buildRemuxArgs({ src, dest }) {
     '-c', 'copy',
     dest,
   ];
+}
+
+/**
+ * Parse the elapsed output time (ms) from an ffmpeg `-progress` stdout chunk.
+ * ffmpeg emits `out_time=HH:MM:SS.micro` lines; returns the last one's ms, or null.
+ * Pure function.
+ * @param {string} text
+ * @returns {number|null}
+ */
+function parseProgressMs(text) {
+  const matches = [...String(text || '').matchAll(/out_time=(\d+):(\d\d):(\d\d(?:\.\d+)?)/g)];
+  if (!matches.length) return null;
+  const m = matches[matches.length - 1];
+  return Math.round((Number(m[1]) * 3600 + Number(m[2]) * 60 + parseFloat(m[3])) * 1000);
 }
 
 /**
@@ -46,12 +61,21 @@ function buildRemuxArgs({ src, dest }) {
  * @returns {Promise<void>} Resolves on successful remux (exit 0).
  * @throws {Error} Rejects with ffmpeg stderr tail if exit code is non-zero.
  */
-function remuxToMkv({ ffmpegPath = 'ffmpeg', src, dest }) {
+function remuxToMkv({ ffmpegPath = 'ffmpeg', src, dest, onProgress }) {
   return new Promise((resolve, reject) => {
     const args = buildRemuxArgs({ src, dest });
     const proc = spawn(ffmpegPath, args);
     const stderrChunks = [];
     proc.stderr.on('data', (chunk) => stderrChunks.push(chunk));
+    if (typeof onProgress === 'function') {
+      proc.stdout.on('data', (chunk) => {
+        const ms = parseProgressMs(chunk.toString());
+        if (ms != null) onProgress(ms);
+      });
+    } else {
+      // Drain stdout so the -progress pipe can't fill and stall the process.
+      proc.stdout.on('data', () => {});
+    }
     proc.on('close', (code) => {
       if (code === 0) {
         resolve();
@@ -166,4 +190,4 @@ function isWithinRoot(root, target) {
   return target === r || target.startsWith(r + '/');
 }
 
-module.exports = { mkvPathFor, buildRemuxArgs, remuxToMkv, buildProbeArgs, parseProbeDurationMs, probeDurationMs, isUnremuxed, recordingStem, pickRelocated, isWithinRoot };
+module.exports = { mkvPathFor, buildRemuxArgs, parseProgressMs, remuxToMkv, buildProbeArgs, parseProbeDurationMs, probeDurationMs, isUnremuxed, recordingStem, pickRelocated, isWithinRoot };

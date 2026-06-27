@@ -11,9 +11,10 @@ const recordSvc = require('../services/recordSession');
 const { createMover } = require('../services/recordMover');
 const recordFinalize = require('../services/recordFinalize');
 
-// Ids currently being remuxed in place (.ts -> .mkv) by the remux/remux-all actions.
-// Surfaced on GET /record so the UI can show a per-row "Remuxing..." state.
+// Ids currently being remuxed in place (.ts -> .mkv) by the remux/remux-all actions,
+// plus their 0-100 progress. Surfaced on GET /record so the UI can show a progress bar.
 const remuxing = new Set();
+const remuxProgress = new Map();
 
 // Remux one finished .ts recording to .mkv in place on the save path (kepler mount),
 // probe its duration, update the row, and delete the original .ts. Best-effort: logs
@@ -23,9 +24,14 @@ async function remuxOne(id, ffmpegPath) {
   const row = repo.get(id);
   if (!recordFinalize.isUnremuxed(row) || remuxing.has(id)) return;
   remuxing.add(id);
+  remuxProgress.set(id, 0);
   try {
     const dest = recordFinalize.mkvPathFor(row.save_path);
-    await recordFinalize.remuxToMkv({ ffmpegPath, src: row.save_path, dest });
+    const totalMs = await recordFinalize.probeDurationMs({ file: row.save_path }).catch(() => null);
+    await recordFinalize.remuxToMkv({
+      ffmpegPath, src: row.save_path, dest,
+      onProgress: (ms) => { if (totalMs) remuxProgress.set(id, Math.min(99, Math.round(ms / totalMs * 100))); },
+    });
     const ms = await recordFinalize.probeDurationMs({ file: dest }).catch(() => null);
     repo.setPaths(id, { save_path: dest });
     if (ms) repo.setDuration(id, ms);
@@ -34,6 +40,7 @@ async function remuxOne(id, ffmpegPath) {
     console.error(`[remux] failed for ${id}: ${err.message}`);
   } finally {
     remuxing.delete(id);
+    remuxProgress.delete(id);
   }
 }
 
@@ -102,8 +109,33 @@ function getMover() {
 }
 
 router.get('/', auth.requireAuth, (req, res) => {
-  const rows = dbSqlite.recordings.list().map(r => ({ ...r, remuxing: remuxing.has(r.id) }));
+  const rows = dbSqlite.recordings.list().map(r => ({
+    ...r,
+    remuxing: remuxing.has(r.id),
+    remux_progress: remuxProgress.has(r.id) ? remuxProgress.get(r.id) : null,
+  }));
   res.json(rows);
+});
+
+// Clear a finished recording from nodecast's tracking. Removes the DB row only —
+// the file on disk is left in place (the recording lives on the NAS now).
+router.post('/:id/clear', auth.requireAuth, (req, res) => {
+  const repo = dbSqlite.recordings;
+  const row = repo.get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Recording not found' });
+  if (['recording', 'moving', 'pending-move'].includes(row.status)) {
+    return res.status(409).json({ error: 'Recording is still in progress' });
+  }
+  repo.remove(row.id);
+  res.json({ ok: true });
+});
+
+// Clear all finished, remuxed (.mkv) recordings from tracking. Files are kept.
+router.post('/clear-remuxed', auth.requireAuth, (req, res) => {
+  const repo = dbSqlite.recordings;
+  const done = repo.list().filter(r => r.status === 'done' && String(r.save_path || '').endsWith('.mkv'));
+  for (const r of done) repo.remove(r.id);
+  res.json({ ok: true, cleared: done.length });
 });
 
 // Recursively list files under a directory (best-effort; returns [] on any error).

@@ -65,6 +65,9 @@ function createRecordingsRepo(db) {
     setDuration(id, durationMs) {
       db.prepare('UPDATE recording_sessions SET duration_ms = ? WHERE id = ?').run(durationMs, id);
     },
+    remove(id) {
+      db.prepare('DELETE FROM recording_sessions WHERE id = ?').run(id);
+    },
   };
 }
 

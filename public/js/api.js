@@ -173,6 +173,8 @@ const API = {
         locate: (id) => API.request('POST', `/record/${id}/locate`),
         browse: (dir) => API.request('GET', `/record/browse${dir ? `?dir=${encodeURIComponent(dir)}` : ''}`),
         relocate: (id, path) => API.request('POST', `/record/${id}/relocate`, { path }),
+        clear: (id) => API.request('POST', `/record/${id}/clear`),
+        clearRemuxed: () => API.request('POST', '/record/clear-remuxed'),
     },
 
     // Users (admin only)

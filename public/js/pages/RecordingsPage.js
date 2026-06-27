@@ -334,21 +334,25 @@ class RecordingsPage {
             return `<span class="rec-badge rec-missing">file missing</span><button class="btn btn-sm rec-locate" data-id="${_recEsc(String(r.id))}">Locate…</button>`;
         };
 
-        // Final recording row (.mkv).
+        // Final recording row (.mkv), with a Clear (untrack) control.
         const finalRow = (r) => {
             const c = chan(r);
+            const id = _recEsc(String(r.id));
             return `<div class="rec-row${c.cls}"${c.attrs}>
                 <span class="rec-name">${nameOf(r)}</span>
                 ${lengthOf(r)}${modeOf(r)}${createdOf(r)}${missingOf(r)}
+                <button class="btn btn-sm rec-clear" data-id="${id}" title="Remove from nodecast (keeps the file)">Clear</button>
             </div>`;
         };
 
-        // Unremuxed (.ts) row, with a per-row remux control.
+        // Unremuxed (.ts) row: a remux control, or a progress bar while remuxing.
         const unremuxedRow = (r) => {
             const c = chan(r);
             const id = _recEsc(String(r.id));
+            const pct = r.remux_progress != null ? r.remux_progress : null;
             const remuxCtl = r.remuxing
-                ? `<span class="rec-remuxing">Remuxing…</span>`
+                ? `<span class="rec-progress" title="Remuxing…"><span class="rec-progress-bar" style="width:${pct != null ? pct : 0}%"></span></span>
+                   <span class="rec-progress-pct">${pct != null ? pct + '%' : 'Remuxing…'}</span>`
                 : `<button class="btn btn-sm rec-remux" data-id="${id}">Remux</button>`;
             return `<div class="rec-row${c.cls}"${c.attrs}>
                 <span class="rec-name">${nameOf(r)}</span>
@@ -388,6 +392,8 @@ class RecordingsPage {
 
         const remuxAllBtn = unremuxed.some(r => !r.remuxing)
             ? `<button class="btn btn-sm rec-remux-all">Remux all</button>` : '';
+        const clearAllBtn = finished.length
+            ? `<button class="btn btn-sm rec-clear-all">Clear all</button>` : '';
 
         this.list.innerHTML = `
             <div class="rec-page-head">
@@ -395,7 +401,7 @@ class RecordingsPage {
                 <button class="btn btn-sm rec-scan" title="Check that recording files still exist on disk">Scan files</button>
             </div>
             ${section('In progress', inProgress, progressRow)}
-            ${section('Recordings', finished, finalRow)}
+            ${section('Recordings', finished, finalRow, clearAllBtn)}
             ${section('Unremuxed (.ts)', unremuxed, unremuxedRow, remuxAllBtn)}
             ${section('Failed', failed, failedRow)}`;
 
@@ -428,6 +434,37 @@ class RecordingsPage {
                     alert(err.message || 'Failed to remux');
                     remuxAll.disabled = false;
                     remuxAll.textContent = 'Remux all';
+                }
+            });
+        }
+
+        this.list.querySelectorAll('.rec-clear').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (!confirm('Remove this recording from nodecast? The file on disk is kept.')) return;
+                btn.disabled = true;
+                try {
+                    await API.record.clear(btn.dataset.id);
+                    window.dispatchEvent(new CustomEvent('recordings-changed'));
+                } catch (err) {
+                    alert(err.message || 'Failed to clear');
+                    btn.disabled = false;
+                }
+            });
+        });
+
+        const clearAll = this.list.querySelector('.rec-clear-all');
+        if (clearAll) {
+            clearAll.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (!confirm('Clear all remuxed recordings from nodecast? Files on disk are kept.')) return;
+                clearAll.disabled = true;
+                try {
+                    await API.record.clearRemuxed();
+                    window.dispatchEvent(new CustomEvent('recordings-changed'));
+                } catch (err) {
+                    alert(err.message || 'Failed to clear');
+                    clearAll.disabled = false;
                 }
             });
         }
@@ -493,7 +530,7 @@ class RecordingsPage {
 
         this.list.querySelectorAll('.rec-row-clickable').forEach(row => {
             row.addEventListener('click', (e) => {
-                if (e.target.closest('.rec-stop-toggle, .rec-cancel-sched, .rec-remux, .rec-remux-all, .rec-error-toggle, .rec-locate')) return;
+                if (e.target.closest('.rec-stop-toggle, .rec-cancel-sched, .rec-remux, .rec-remux-all, .rec-error-toggle, .rec-locate, .rec-clear, .rec-clear-all')) return;
                 const { channelId, sourceId, sourceType, streamId } = row.dataset;
                 try {
                     window.app.navigateTo('live');
