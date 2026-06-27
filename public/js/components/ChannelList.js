@@ -518,6 +518,9 @@ class ChannelList {
             <button class="favorite-btn ${isFavorite ? 'active' : ''}" title="${isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}">
               ${isFavorite ? Icons.favorite : Icons.favoriteOutline}
             </button>
+            <button class="record-btn" title="Record this channel" data-rec-url="${channel.url || ''}" data-rec-name="${this.escapeHtml(channel.name)}">
+              ${Icons.record}
+            </button>
           </div>
         `;
             }
@@ -568,6 +571,7 @@ class ChannelList {
         groupEl.querySelectorAll('.channel-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 if (e.target.closest('.favorite-btn')) return;
+                if (e.target.closest('.record-btn')) return;
                 this.selectChannel(item.dataset);
             });
             item.addEventListener('contextmenu', (e) => this.showContextMenu(e, 'channel', item.dataset));
@@ -577,6 +581,14 @@ class ChannelList {
                 favBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     this.toggleFavorite(parseInt(item.dataset.sourceId), item.dataset.channelId);
+                });
+            }
+
+            const recBtn = item.querySelector('.record-btn');
+            if (recBtn) {
+                recBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.showRecordMenu(recBtn, item.dataset);
                 });
             }
         });
@@ -631,6 +643,9 @@ class ChannelList {
             <button class="favorite-btn ${isFavorite ? 'active' : ''}" title="${isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}">
               ${isFavorite ? Icons.favorite : Icons.favoriteOutline}
             </button>
+            <button class="record-btn" title="Record this channel" data-rec-url="${channel.url || ''}" data-rec-name="${this.escapeHtml(channel.name)}">
+              ${Icons.record}
+            </button>
           </div>
         `;
         }
@@ -641,6 +656,7 @@ class ChannelList {
         container.querySelectorAll('.channel-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 if (e.target.closest('.favorite-btn')) return;
+                if (e.target.closest('.record-btn')) return;
                 this.selectChannel(item.dataset);
             });
             item.addEventListener('contextmenu', (e) => this.showContextMenu(e, 'channel', item.dataset));
@@ -650,6 +666,14 @@ class ChannelList {
                 favBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     this.toggleFavorite(parseInt(item.dataset.sourceId), item.dataset.channelId);
+                });
+            }
+
+            const recBtn = item.querySelector('.record-btn');
+            if (recBtn) {
+                recBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.showRecordMenu(recBtn, item.dataset);
                 });
             }
         });
@@ -965,6 +989,80 @@ class ChannelList {
         }
     }
 
+    getProgramEndMs(dataset) {
+        try {
+            if (!window.app?.epgGuide) return null;
+            const channel = this.channels.find(c =>
+                c.id === dataset.channelId && String(c.sourceId) === String(dataset.sourceId)
+            );
+            if (!channel) return null;
+            const program = window.app.epgGuide.getCurrentProgram(channel.tvgId, channel.name);
+            if (!program?.stop) return null;
+            return new Date(program.stop).getTime();
+        } catch (e) {
+            return null;
+        }
+    }
+
+    getProgramTitle(dataset) {
+        try {
+            if (!window.app?.epgGuide) return null;
+            const channel = this.channels.find(c =>
+                c.id === dataset.channelId && String(c.sourceId) === String(dataset.sourceId)
+            );
+            if (!channel) return null;
+            const program = window.app.epgGuide.getCurrentProgram(channel.tvgId, channel.name);
+            return program?.title || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    showRecordMenu(anchorEl, dataset) {
+        document.querySelector('.record-menu')?.remove();
+        const url = anchorEl.dataset.recUrl;
+        const name = anchorEl.dataset.recName;
+        if (!url) { alert('No stream URL for this channel'); return; }
+
+        const epgEndMs = this.getProgramEndMs(dataset);
+        const programmeTitle = this.getProgramTitle(dataset);
+
+        const menu = document.createElement('div');
+        menu.className = 'record-menu';
+        const opts = [];
+        if (epgEndMs) opts.push(`<button data-mode="program">Record this program</button>`);
+        opts.push(`<button data-mode="duration" data-min="60">Record 60 min</button>`);
+        opts.push(`<button data-mode="duration" data-min="120">Record 120 min</button>`);
+        opts.push(`<button data-mode="manual">Record now (manual stop)</button>`);
+        menu.innerHTML = opts.join('');
+
+        const rect = anchorEl.getBoundingClientRect();
+        menu.style.position = 'fixed';
+        menu.style.top = `${rect.bottom}px`;
+        menu.style.left = `${rect.left}px`;
+        document.body.appendChild(menu);
+
+        menu.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+            this.startRecording({
+                url, channelName: name, mode: b.dataset.mode,
+                durationMin: b.dataset.min ? parseInt(b.dataset.min, 10) : undefined,
+                epgEndMs: b.dataset.mode === 'program' ? epgEndMs : undefined,
+                programmeTitle: b.dataset.mode === 'program' ? programmeTitle : undefined,
+            });
+            menu.remove();
+        }));
+        setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
+    }
+
+    async startRecording(payload) {
+        try {
+            await API.record.start(payload);
+            window.dispatchEvent(new CustomEvent('recordings-changed'));
+        } catch (err) {
+            alert(err.message || 'Failed to start recording');
+        }
+    }
+
     /**
      * Update Favorites group in DOM and data
      */
@@ -1049,11 +1147,15 @@ class ChannelList {
             <button class="favorite-btn active" title="Remove from Favorites">
               ❤️
             </button>
+            <button class="record-btn" title="Record this channel" data-rec-url="${channel.url || ''}" data-rec-name="${this.escapeHtml(channel.name)}">
+              ${Icons.record}
+            </button>
         `;
 
         // Attach listeners
         div.addEventListener('click', (e) => {
             if (e.target.closest('.favorite-btn')) return;
+            if (e.target.closest('.record-btn')) return;
             // Pass the render ID from the dataset
             this.selectChannel({ ...div.dataset, renderId: div.dataset.renderId });
         });
@@ -1064,6 +1166,14 @@ class ChannelList {
             favBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.toggleFavorite(parseInt(div.dataset.sourceId), div.dataset.channelId);
+            });
+        }
+
+        const recBtn = div.querySelector('.record-btn');
+        if (recBtn) {
+            recBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showRecordMenu(recBtn, div.dataset);
             });
         }
 
