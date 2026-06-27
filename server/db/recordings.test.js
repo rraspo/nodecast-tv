@@ -65,3 +65,21 @@ test('create defaults channel identity fields to null when absent', () => {
   assert.strictEqual(row.source_type, null);
   assert.strictEqual(row.stream_id, null);
 });
+
+test('setPaths updates only the provided path columns', () => {
+  const repo = freshRepo();
+  repo.create({ id: 'sp1', channel_name: 'A', mode: 'manual', status: 'recording',
+    staging_path: '/staging/sp1.ts', save_path: '/recordings/A.mkv' });
+
+  // Update staging_path only; save_path must stay unchanged.
+  repo.setPaths('sp1', { staging_path: '/staging/sp1.mkv' });
+  let row = repo.get('sp1');
+  assert.strictEqual(row.staging_path, '/staging/sp1.mkv');
+  assert.strictEqual(row.save_path, '/recordings/A.mkv');
+
+  // Update save_path only; staging_path must stay unchanged.
+  repo.setPaths('sp1', { save_path: '/recordings/A.ts' });
+  row = repo.get('sp1');
+  assert.strictEqual(row.staging_path, '/staging/sp1.mkv');
+  assert.strictEqual(row.save_path, '/recordings/A.ts');
+});

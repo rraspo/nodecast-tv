@@ -1,5 +1,8 @@
+'use strict';
+
 const fsp = require('fs').promises;
 const path = require('path');
+const recordFinalize = require('./recordFinalize');
 
 async function isMounted(mountPath) {
   try {
@@ -18,12 +21,41 @@ async function moveFile(src, dest) {
   await fsp.unlink(src);
 }
 
-function createMover({ repo, config, intervalMs = 30000, isMountedFn = isMounted, moveFileFn = moveFile }) {
+function createMover({
+  repo,
+  config,
+  intervalMs = 30000,
+  isMountedFn = isMounted,
+  moveFileFn = moveFile,
+  remuxFn = recordFinalize.remuxToMkv,
+  mkvPathForFn = recordFinalize.mkvPathFor,
+}) {
   let timer = null;
 
   async function attempt(row) {
     if (!row) return;
     repo.setState(row.id, 'moving');
+
+    // Finalize: if the destination is .mkv but staging is still .ts, remux first.
+    // Idempotent: if staging_path already ends .mkv (retry/restart), skip remux.
+    if (row.save_path.endsWith('.mkv') && row.staging_path.endsWith('.ts')) {
+      const mkv = mkvPathForFn(row.staging_path);
+      try {
+        await remuxFn({ src: row.staging_path, dest: mkv });
+        // Success — delete the source .ts (best-effort) and advance staging_path.
+        await fsp.unlink(row.staging_path).catch(() => {});
+        repo.setPaths(row.id, { staging_path: mkv });
+        row.staging_path = mkv;
+      } catch (err) {
+        // DATA-SAFE FALLBACK: remux failed. Keep the .ts and deliver it instead.
+        // The recording is not lost — we fall through to move the original .ts file.
+        console.warn(`[recordMover] remux failed for ${row.id}, falling back to .ts delivery: ${err.message}`);
+        const tsSave = row.save_path.replace(/\.mkv$/, '.ts');
+        repo.setPaths(row.id, { save_path: tsSave });
+        row.save_path = tsSave;
+      }
+    }
+
     if (!(await isMountedFn(path.dirname(row.save_path)))) {
       repo.setState(row.id, 'pending-move');
       return;

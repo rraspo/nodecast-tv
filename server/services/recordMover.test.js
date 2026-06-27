@@ -61,3 +61,81 @@ test('mover: unhealthy dest -> pending-move, retried when healthy', async () => 
   await mover.processPending();
   assert.strictEqual(repo.get('m2').status, 'done');
 });
+
+// --- finalize (remux) tests ---
+
+test('mover finalize: .ts staging + .mkv save -> remux called, .ts removed, .mkv moved to dest', async () => {
+  const dir = tmp();
+  const stagingTs = path.join(dir, 'rec.ts');
+  const stagingMkv = path.join(dir, 'rec.mkv');
+  const destMkv = path.join(dir, 'dest', 'Movie.mkv');
+  await fsp.writeFile(stagingTs, 'TS');
+  const db = new Database(':memory:'); db.exec(RECORDINGS_DDL);
+  const repo = createRecordingsRepo(db);
+  repo.create({ id: 'f1', channel_name: 'A', mode: 'manual', status: 'recording',
+    staging_path: stagingTs, save_path: destMkv });
+
+  let remuxCalled = false;
+  const remuxFn = async ({ src, dest }) => {
+    remuxCalled = true;
+    assert.strictEqual(src, stagingTs);
+    assert.strictEqual(dest, stagingMkv);
+    await fsp.writeFile(dest, 'MKV');
+  };
+  const mkvPathForFn = (p) => p.replace(/\.ts$/, '.mkv');
+
+  const mover = createMover({ repo, config: {}, isMountedFn: async () => true, remuxFn, mkvPathForFn });
+  await mover.enqueue('f1');
+
+  assert.ok(remuxCalled, 'remux must be called');
+  assert.strictEqual(repo.get('f1').status, 'done');
+  assert.strictEqual(fs.existsSync(stagingTs), false, '.ts source must be deleted');
+  assert.ok(fs.existsSync(destMkv), '.mkv must exist at save path');
+  assert.ok(repo.get('f1').staging_path.endsWith('.mkv'), 'staging_path updated to .mkv in DB');
+});
+
+test('mover finalize: remux failure -> fallback to .ts delivery, status done', async () => {
+  const dir = tmp();
+  const stagingTs = path.join(dir, 'rec.ts');
+  const destMkv = path.join(dir, 'dest', 'Movie.mkv');
+  const destTs = path.join(dir, 'dest', 'Movie.ts');
+  await fsp.writeFile(stagingTs, 'TS');
+  const db = new Database(':memory:'); db.exec(RECORDINGS_DDL);
+  const repo = createRecordingsRepo(db);
+  repo.create({ id: 'f2', channel_name: 'A', mode: 'manual', status: 'recording',
+    staging_path: stagingTs, save_path: destMkv });
+
+  const remuxFn = async () => { throw new Error('codec error'); };
+  const mkvPathForFn = (p) => p.replace(/\.ts$/, '.mkv');
+
+  const mover = createMover({ repo, config: {}, isMountedFn: async () => true, remuxFn, mkvPathForFn });
+  await mover.enqueue('f2');
+
+  assert.strictEqual(repo.get('f2').status, 'done');
+  assert.strictEqual(repo.get('f2').save_path, destTs, 'save_path switched to .ts fallback');
+  assert.strictEqual(fs.existsSync(stagingTs), false, '.ts moved away from staging');
+  assert.ok(fs.existsSync(destTs), 'original .ts delivered to dest');
+  assert.strictEqual(fs.existsSync(destMkv), false, 'no .mkv at dest (remux failed)');
+});
+
+test('mover finalize: staging already .mkv -> remux skipped, just moved', async () => {
+  const dir = tmp();
+  const stagingMkv = path.join(dir, 'rec.mkv');
+  const destMkv = path.join(dir, 'dest', 'Movie.mkv');
+  await fsp.writeFile(stagingMkv, 'MKV');
+  const db = new Database(':memory:'); db.exec(RECORDINGS_DDL);
+  const repo = createRecordingsRepo(db);
+  repo.create({ id: 'f3', channel_name: 'A', mode: 'manual', status: 'recording',
+    staging_path: stagingMkv, save_path: destMkv });
+
+  let remuxCalled = false;
+  const remuxFn = async () => { remuxCalled = true; };
+  const mkvPathForFn = (p) => p.replace(/\.ts$/, '.mkv');
+
+  const mover = createMover({ repo, config: {}, isMountedFn: async () => true, remuxFn, mkvPathForFn });
+  await mover.enqueue('f3');
+
+  assert.strictEqual(remuxCalled, false, 'remux must NOT be called when staging is already .mkv');
+  assert.strictEqual(repo.get('f3').status, 'done');
+  assert.ok(fs.existsSync(destMkv));
+});

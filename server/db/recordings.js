@@ -49,6 +49,14 @@ function createRecordingsRepo(db) {
       db.prepare(`UPDATE recording_sessions SET ${sets.join(', ')} WHERE id = @id`)
         .run({ id, status, error: fields.error ?? null, ended_at: fields.ended_at ?? null });
     },
+    setPaths(id, { staging_path, save_path } = {}) {
+      const sets = [];
+      const params = { id };
+      if (staging_path !== undefined) { sets.push('staging_path = @staging_path'); params.staging_path = staging_path; }
+      if (save_path !== undefined) { sets.push('save_path = @save_path'); params.save_path = save_path; }
+      if (sets.length === 0) return;
+      db.prepare(`UPDATE recording_sessions SET ${sets.join(', ')} WHERE id = @id`).run(params);
+    },
   };
 }
 

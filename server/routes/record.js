@@ -80,7 +80,7 @@ router.post('/start', auth.requireAuth, async (req, res) => {
     });
 
     const stamp = formatStamp(new Date());
-    const savePath = path.join(recordConfig.savePath, `${session.fileBase} - ${stamp}.ts`);
+    const savePath = path.join(recordConfig.savePath, `${session.fileBase} - ${stamp}.mkv`);
     repo.create({
       id: session.id, channel_name: req.body.channelName || parsed.value.fileBase,
       programme_title: parsed.value.programmeTitle, mode: parsed.value.mode,
