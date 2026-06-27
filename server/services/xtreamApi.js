@@ -158,4 +158,23 @@ async function authenticate(url, username, password) {
     return api.authenticate();
 }
 
-module.exports = { XtreamApi, createFromSource, authenticate };
+/**
+ * Extract concurrent-connection info from an authenticate() response.
+ * Xtream returns these inside user_info, usually as strings ("1", "3").
+ * @param {Object} data - The object returned by authenticate().
+ * @returns {{active: number|null, max: number|null}} Parsed counts (null when absent/unparseable).
+ */
+function parseConnectionInfo(data) {
+    const info = (data && data.user_info) || {};
+    const toNum = (v) => {
+        if (v === null || v === undefined || v === '') return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+    };
+    return {
+        active: toNum(info.active_cons),
+        max: toNum(info.max_connections),
+    };
+}
+
+module.exports = { XtreamApi, createFromSource, authenticate, parseConnectionInfo };

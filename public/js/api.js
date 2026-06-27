@@ -62,6 +62,7 @@ const API = {
         getStatus: () => API.request('GET', '/sources/status'), // Get all statuses
         estimate: (id) => API.request('GET', `/sources/${id}/estimate`), // Estimate M3U size
         estimateByUrl: (url, type) => API.request('POST', '/sources/estimate', { url, type }), // Estimate by URL (before creation)
+        connections: () => API.request('GET', '/sources/connections'), // Active provider connections (active_cons/max_connections)
     },
 
     // Channels (hidden items)

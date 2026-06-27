@@ -35,6 +35,42 @@ router.get('/status', async (req, res) => {
     }
 });
 
+// Active provider connections (active_cons / max_connections per Xtream source).
+// Short in-memory cache so polling the badge doesn't hammer the provider.
+const connCache = new Map();
+const CONN_TTL_MS = 8000;
+
+router.get('/connections', async (req, res) => {
+    try {
+        const all = await sources.getAll();
+        const xtreamSources = all.filter(s => s.type === 'xtream' && s.enabled);
+
+        const results = await Promise.all(xtreamSources.map(async (s) => {
+            const cached = connCache.get(s.id);
+            if (cached && Date.now() - cached.ts < CONN_TTL_MS) {
+                return cached.data;
+            }
+            let data;
+            try {
+                const auth = await xtreamApi.authenticate(s.url, s.username, s.password);
+                const info = xtreamApi.parseConnectionInfo(auth);
+                data = { id: s.id, name: s.name, active: info.active, max: info.max };
+            } catch (err) {
+                data = { id: s.id, name: s.name, active: null, max: null, error: err.message };
+            }
+            connCache.set(s.id, { ts: Date.now(), data });
+            return data;
+        }));
+
+        const totalActive = results.reduce((sum, r) => sum + (r.active || 0), 0);
+        const totalMax = results.reduce((sum, r) => sum + (r.max || 0), 0);
+        res.json({ sources: results, totalActive, totalMax });
+    } catch (err) {
+        console.error('Error getting connections:', err);
+        res.status(500).json({ error: 'Failed to get connections' });
+    }
+});
+
 // Get sources by type
 router.get('/type/:type', async (req, res) => {
     try {
