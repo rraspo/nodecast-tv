@@ -4828,8 +4828,8 @@ kbd {
 .record-btn { background: none; border: none; color: inherit; cursor: pointer; opacity: .7; }
 .record-btn:hover { opacity: 1; color: #e53935; }
 
-/* Recording indicator pill */
-.rec-indicator { position: fixed; top: 12px; right: 16px; z-index: 9998; display: inline-flex; align-items: center; gap: 6px; background: #e53935; color: #fff; border: none; border-radius: 14px; padding: 4px 10px; cursor: pointer; }
+/* Recording count badge on the Recordings nav link */
+.nav-badge { display: inline-block; background: #e53935; color: #fff; font-size: .7rem; padding: 0 6px; border-radius: 10px; margin-left: 6px; font-weight: 600; line-height: 1.5; vertical-align: middle; }
 
 /* Recordings page */
 .recordings-header { padding: 24px 24px 12px; border-bottom: 1px solid var(--border, #333); }
@@ -4851,3 +4851,5 @@ kbd {
 .rec-stop-btn:hover { background: rgba(229,57,53,.35); }
 .rec-stop-btn:disabled { opacity: .45; cursor: not-allowed; }
 .rec-empty { padding: 12px; opacity: .6; }
+.rec-row-clickable { cursor: pointer; }
+.rec-row-clickable:hover { background: var(--color-bg-hover, #22222f); }

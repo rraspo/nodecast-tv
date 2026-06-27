@@ -66,7 +66,11 @@ class RecordingsPage {
             const stopBtn = r.status === 'recording'
                 ? `<button class="btn btn-sm rec-stop-btn" data-id="${_recEsc(String(r.id))}">Stop</button>`
                 : '';
-            return `<div class="rec-row">
+            const hasChannel = !!(r.source_type && r.channel_id);
+            const channelAttrs = hasChannel
+                ? ` data-channel-id="${_recEsc(String(r.channel_id))}" data-source-id="${_recEsc(String(r.source_id || ''))}" data-source-type="${_recEsc(r.source_type)}" data-stream-id="${_recEsc(String(r.stream_id || ''))}" title="Open channel"`
+                : '';
+            return `<div class="rec-row${hasChannel ? ' rec-row-clickable' : ''}"${channelAttrs}>
                 <span class="rec-name">${name}</span>
                 <span class="rec-badge rec-${status}">${status}</span>
                 ${mode ? `<span class="rec-mode">${mode}</span>` : ''}
@@ -88,6 +92,22 @@ class RecordingsPage {
                 } catch (e) {
                     alert(e.message || 'Failed to stop recording');
                     b.disabled = false;
+                }
+            });
+        });
+
+        this.list.querySelectorAll('.rec-row-clickable').forEach(row => {
+            row.addEventListener('click', (e) => {
+                if (e.target.closest('.rec-stop-btn')) return;
+                const { channelId, sourceId, sourceType, streamId } = row.dataset;
+                try {
+                    window.app.navigateTo('live');
+                    const cl = window.app && window.app.channelList;
+                    if (cl) {
+                        cl.selectChannel({ channelId, sourceId, sourceType, streamId });
+                    }
+                } catch (err) {
+                    console.warn('[RecordingsPage] Could not select channel:', err);
                 }
             });
         });

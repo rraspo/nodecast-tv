@@ -354,6 +354,10 @@ class VideoPlayer {
                 epgEndMs,
                 programmeTitle,
                 resolveUrl: async () => this.currentUrl,
+                channelId: this.currentChannel.id || undefined,
+                sourceId: this.currentChannel.sourceId != null ? String(this.currentChannel.sourceId) : undefined,
+                sourceType: this.currentChannel.sourceType || undefined,
+                streamId: this.currentChannel.streamId != null ? String(this.currentChannel.streamId) : undefined,
             });
         });
 

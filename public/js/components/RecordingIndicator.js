@@ -1,25 +1,32 @@
-/* Compact REC pill that shows active recording count and navigates to the Recordings page. */
+/* Active-recording count badge on the Recordings nav link. */
 (function () {
   const ACTIVE = ['recording', 'moving', 'pending-move'];
 
-  function el(html) { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstChild; }
+  let badge = null;
 
-  const pill = el(`<button id="rec-indicator" class="rec-indicator" style="display:none" title="View Recordings">
-    ${window.Icons?.record || '●'} <span class="rec-count">0</span></button>`);
-  document.addEventListener('DOMContentLoaded', () => document.body.appendChild(pill));
-
-  pill.addEventListener('click', () => {
-    if (window.app && window.app.navigateTo) {
-      window.app.navigateTo('recordings');
-    }
-  });
+  function getBadge() {
+    if (badge) return badge;
+    const navLink = document.querySelector('.nav-link[data-page="recordings"]');
+    if (!navLink) return null;
+    badge = document.createElement('span');
+    badge.className = 'nav-badge';
+    badge.style.display = 'none';
+    navLink.appendChild(badge);
+    return badge;
+  }
 
   async function refresh() {
     let rows = [];
     try { rows = await window.API.record.list(); } catch { rows = []; }
     const active = rows.filter(r => ACTIVE.includes(r.status));
-    pill.style.display = active.length ? 'inline-flex' : 'none';
-    pill.querySelector('.rec-count').textContent = active.length;
+    const b = getBadge();
+    if (!b) return;
+    if (active.length > 0) {
+      b.textContent = active.length;
+      b.style.display = '';
+    } else {
+      b.style.display = 'none';
+    }
   }
 
   window.addEventListener('recordings-changed', refresh);

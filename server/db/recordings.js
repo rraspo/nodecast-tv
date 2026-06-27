@@ -9,7 +9,11 @@ const RECORDINGS_DDL = `
     save_path TEXT NOT NULL,
     error TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    ended_at DATETIME
+    ended_at DATETIME,
+    channel_id TEXT,
+    source_id TEXT,
+    source_type TEXT,
+    stream_id TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_recordings_status ON recording_sessions(status);
 `;
@@ -20,9 +24,9 @@ function createRecordingsRepo(db) {
   return {
     create(rec) {
       db.prepare(`INSERT INTO recording_sessions
-        (id, channel_name, programme_title, mode, status, staging_path, save_path)
-        VALUES (@id, @channel_name, @programme_title, @mode, @status, @staging_path, @save_path)`)
-        .run({ programme_title: null, ...rec });
+        (id, channel_name, programme_title, mode, status, staging_path, save_path, channel_id, source_id, source_type, stream_id)
+        VALUES (@id, @channel_name, @programme_title, @mode, @status, @staging_path, @save_path, @channel_id, @source_id, @source_type, @stream_id)`)
+        .run({ programme_title: null, channel_id: null, source_id: null, source_type: null, stream_id: null, ...rec });
       return this.get(rec.id);
     },
     get(id) {

@@ -85,6 +85,10 @@ router.post('/start', auth.requireAuth, async (req, res) => {
       id: session.id, channel_name: req.body.channelName || parsed.value.fileBase,
       programme_title: parsed.value.programmeTitle, mode: parsed.value.mode,
       status: 'recording', staging_path: session.stagingPath, save_path: savePath,
+      channel_id: req.body.channelId || null,
+      source_id: req.body.sourceId != null ? String(req.body.sourceId) : null,
+      source_type: req.body.sourceType || null,
+      stream_id: req.body.streamId != null ? String(req.body.streamId) : null,
     });
 
     session.on('exit', () => {

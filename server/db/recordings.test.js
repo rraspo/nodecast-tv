@@ -41,3 +41,27 @@ test('listByState filters', () => {
   assert.strictEqual(repo.listByState('pending-move').length, 1);
   assert.strictEqual(repo.listByState('done').length, 0);
 });
+
+test('create + get round-trips channel identity fields', () => {
+  const repo = freshRepo();
+  repo.create({
+    id: 'ch1', channel_name: 'SkyNews', mode: 'manual', status: 'recording',
+    staging_path: '/s/ch1.ts', save_path: '/r/ch1.ts',
+    channel_id: 'xtream_3_456', source_id: '3', source_type: 'xtream', stream_id: '456',
+  });
+  const row = repo.get('ch1');
+  assert.strictEqual(row.channel_id, 'xtream_3_456');
+  assert.strictEqual(row.source_id, '3');
+  assert.strictEqual(row.source_type, 'xtream');
+  assert.strictEqual(row.stream_id, '456');
+});
+
+test('create defaults channel identity fields to null when absent', () => {
+  const repo = freshRepo();
+  repo.create({ id: 'n1', channel_name: 'A', mode: 'manual', status: 'recording', staging_path: '/s/n1.ts', save_path: '/r/n1.ts' });
+  const row = repo.get('n1');
+  assert.strictEqual(row.channel_id, null);
+  assert.strictEqual(row.source_id, null);
+  assert.strictEqual(row.source_type, null);
+  assert.strictEqual(row.stream_id, null);
+});

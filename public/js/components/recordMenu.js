@@ -7,6 +7,10 @@
  *   epgEndMs      {number|null}     - EPG program end time as ms timestamp, or null
  *   programmeTitle {string|null}    - current programme title, or null
  *   resolveUrl    {async function}  - returns the real stream URL (handles Xtream resolution)
+ *   channelId     {string|null}     - composite channel ID (e.g. "xtream_3_456")
+ *   sourceId      {string|null}     - source ID
+ *   sourceType    {string|null}     - "xtream" | "m3u"
+ *   streamId      {string|null}     - raw stream ID from provider
  */
 window.RecordMenu = {
     /**
@@ -17,7 +21,7 @@ window.RecordMenu = {
     open(anchorEl, ctx) {
         document.querySelector('.record-menu')?.remove();
 
-        const { channelName, epgEndMs, programmeTitle, resolveUrl } = ctx;
+        const { channelName, epgEndMs, programmeTitle, resolveUrl, channelId, sourceId, sourceType, streamId } = ctx;
 
         const menu = document.createElement('div');
         menu.className = 'record-menu';
@@ -62,6 +66,10 @@ window.RecordMenu = {
                 durationMin: b.dataset.min ? parseInt(b.dataset.min, 10) : undefined,
                 epgEndMs: b.dataset.mode === 'program' ? epgEndMs : undefined,
                 programmeTitle: b.dataset.mode === 'program' ? programmeTitle : undefined,
+                channelId: channelId || undefined,
+                sourceId: sourceId || undefined,
+                sourceType: sourceType || undefined,
+                streamId: streamId || undefined,
             });
         }));
 

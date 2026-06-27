@@ -147,6 +147,16 @@ function initSchema() {
     // Recording Sessions
     db.exec(RECORDINGS_DDL);
 
+    // Migration: Add channel identity columns if missing (for existing DBs)
+    ['channel_id TEXT', 'source_id TEXT', 'source_type TEXT', 'stream_id TEXT'].forEach(colDef => {
+        try {
+            db.exec(`ALTER TABLE recording_sessions ADD COLUMN ${colDef}`);
+            console.log(`[SQLite] Added ${colDef.split(' ')[0]} column to recording_sessions`);
+        } catch (e) {
+            // Column already exists, ignore
+        }
+    });
+
     console.log('[SQLite] Schema initialized');
 }
 

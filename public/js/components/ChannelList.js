@@ -1039,7 +1039,13 @@ class ChannelList {
             return channel?.url || '';
         };
 
-        window.RecordMenu.open(anchorEl, { channelName, epgEndMs, programmeTitle, resolveUrl });
+        window.RecordMenu.open(anchorEl, {
+            channelName, epgEndMs, programmeTitle, resolveUrl,
+            channelId: dataset.channelId,
+            sourceId: dataset.sourceId,
+            sourceType: dataset.sourceType,
+            streamId: dataset.streamId,
+        });
     }
 
     /**
