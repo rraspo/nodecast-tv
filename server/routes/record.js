@@ -339,6 +339,16 @@ router.post('/:id/remux', auth.requireAuth, (req, res) => {
   res.status(202).json({ started: true });
 });
 
+// Force a move/finalize attempt now (instead of waiting for the 30s mover tick or a
+// restart). Useful for a pending-move recording once the NAS is back, or to retry a
+// move that errored while its staging file is still present.
+router.post('/:id/retry-move', auth.requireAuth, (req, res) => {
+  const row = dbSqlite.recordings.get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Recording not found' });
+  getMover().enqueue(row.id).catch(console.error);
+  res.status(202).json({ started: true });
+});
+
 router.delete('/:id', auth.requireAuth, (req, res) => {
   const session = recordSvc.getSession(req.params.id);
   if (session) session.stop();

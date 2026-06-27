@@ -321,10 +321,14 @@ class RecordingsPage {
                     : '';
                 stopControl = `${scheduleInfo}<button class="btn btn-sm rec-stop-toggle" data-id="${_recEsc(String(r.id))}">Stop &#9660;</button>`;
             }
+            // A pending-move recording is captured but waiting for the NAS mount; offer a manual retry.
+            const moveControl = r.status === 'pending-move'
+                ? `<span class="rec-pending-note">waiting for NAS</span><button class="btn btn-sm rec-retry-move" data-id="${_recEsc(String(r.id))}" title="Move to the NAS now">Move to NAS</button>`
+                : '';
             return `<div class="rec-row${c.cls}"${c.attrs}>
                 <span class="rec-name">${nameOf(r)}</span>
                 <span class="rec-badge rec-${_recEsc(r.status)}">${_recEsc(r.status)}</span>
-                ${elapsedHtml}${lengthOf(r)}${modeOf(r)}${createdOf(r)}${stopControl}
+                ${elapsedHtml}${lengthOf(r)}${modeOf(r)}${createdOf(r)}${stopControl}${moveControl}
             </div>`;
         };
 
@@ -438,6 +442,22 @@ class RecordingsPage {
             });
         }
 
+        this.list.querySelectorAll('.rec-retry-move').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                btn.disabled = true;
+                btn.textContent = 'Moving…';
+                try {
+                    await API.record.retryMove(btn.dataset.id);
+                    window.dispatchEvent(new CustomEvent('recordings-changed'));
+                } catch (err) {
+                    alert(err.message || 'Failed to start move');
+                    btn.disabled = false;
+                    btn.textContent = 'Move to NAS';
+                }
+            });
+        });
+
         this.list.querySelectorAll('.rec-clear').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
@@ -530,7 +550,7 @@ class RecordingsPage {
 
         this.list.querySelectorAll('.rec-row-clickable').forEach(row => {
             row.addEventListener('click', (e) => {
-                if (e.target.closest('.rec-stop-toggle, .rec-cancel-sched, .rec-remux, .rec-remux-all, .rec-error-toggle, .rec-locate, .rec-clear, .rec-clear-all')) return;
+                if (e.target.closest('.rec-stop-toggle, .rec-cancel-sched, .rec-remux, .rec-remux-all, .rec-error-toggle, .rec-locate, .rec-clear, .rec-clear-all, .rec-retry-move')) return;
                 const { channelId, sourceId, sourceType, streamId } = row.dataset;
                 try {
                     window.app.navigateTo('live');

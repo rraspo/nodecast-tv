@@ -35,36 +35,65 @@ router.get('/status', async (req, res) => {
     }
 });
 
-// Active provider connections (active_cons / max_connections per Xtream source).
-// Short in-memory cache so polling the badge doesn't hammer the provider.
+// Active provider connections per Xtream source. The provider's active_cons is the
+// global truth (sees all devices) but lags; we merge nodecast's OWN in-flight usage
+// (active recordings + transcoded playback) so this box's activity shows immediately
+// on the correct source. Note: a direct browser->provider playback has no server
+// session, so only the provider counter sees it.
 const connCache = new Map();
 const CONN_TTL_MS = 8000;
+
+function hostOf(u) { try { return new URL(u).host; } catch { return null; } }
+
+// Count connections nodecast itself holds, keyed by source id (as string).
+function ownUsageBySource(allSources) {
+    const dbSqlite = require('../db/sqlite');
+    const transcodeSession = require('../services/transcodeSession');
+    const counts = new Map();
+    const bump = (id) => counts.set(String(id), (counts.get(String(id)) || 0) + 1);
+
+    const ACTIVE = ['recording', 'moving', 'pending-move'];
+    for (const r of dbSqlite.recordings.list()) {
+        if (ACTIVE.includes(r.status) && r.source_id != null) bump(r.source_id);
+    }
+    const sessions = transcodeSession.getAllSessions ? transcodeSession.getAllSessions() : [];
+    for (const sess of sessions) {
+        const h = hostOf(sess.url);
+        if (!h) continue;
+        const src = allSources.find(s => hostOf(s.url) === h);
+        if (src) bump(src.id);
+    }
+    return counts;
+}
 
 router.get('/connections', async (req, res) => {
     try {
         const all = await sources.getAll();
         const xtreamSources = all.filter(s => s.type === 'xtream' && s.enabled);
+        const own = ownUsageBySource(all);
 
         const results = await Promise.all(xtreamSources.map(async (s) => {
-            const cached = connCache.get(s.id);
-            if (cached && Date.now() - cached.ts < CONN_TTL_MS) {
-                return cached.data;
+            let cached = connCache.get(s.id);
+            if (!cached || Date.now() - cached.ts >= CONN_TTL_MS) {
+                let prov;
+                try {
+                    const auth = await xtreamApi.authenticate(s.url, s.username, s.password);
+                    const info = xtreamApi.parseConnectionInfo(auth);
+                    prov = { active: info.active, max: info.max };
+                } catch (err) {
+                    prov = { active: null, max: null, error: err.message };
+                }
+                cached = { ts: Date.now(), prov };
+                connCache.set(s.id, cached);
             }
-            let data;
-            try {
-                const auth = await xtreamApi.authenticate(s.url, s.username, s.password);
-                const info = xtreamApi.parseConnectionInfo(auth);
-                data = { id: s.id, name: s.name, active: info.active, max: info.max };
-            } catch (err) {
-                data = { id: s.id, name: s.name, active: null, max: null, error: err.message };
-            }
-            connCache.set(s.id, { ts: Date.now(), data });
-            return data;
+            const ownN = own.get(String(s.id)) || 0;
+            const providerActive = cached.prov.active;
+            // Merge: never show fewer than what this box is actually using.
+            const active = Math.max(providerActive || 0, ownN);
+            return { id: s.id, name: s.name, active, max: cached.prov.max, providerActive, own: ownN, error: cached.prov.error };
         }));
 
-        const totalActive = results.reduce((sum, r) => sum + (r.active || 0), 0);
-        const totalMax = results.reduce((sum, r) => sum + (r.max || 0), 0);
-        res.json({ sources: results, totalActive, totalMax });
+        res.json({ sources: results });
     } catch (err) {
         console.error('Error getting connections:', err);
         res.status(500).json({ error: 'Failed to get connections' });

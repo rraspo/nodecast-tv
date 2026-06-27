@@ -175,6 +175,7 @@ const API = {
         relocate: (id, path) => API.request('POST', `/record/${id}/relocate`, { path }),
         clear: (id) => API.request('POST', `/record/${id}/clear`),
         clearRemuxed: () => API.request('POST', '/record/clear-remuxed'),
+        retryMove: (id) => API.request('POST', `/record/${id}/retry-move`),
     },
 
     // Users (admin only)

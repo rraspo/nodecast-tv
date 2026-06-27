@@ -34,24 +34,30 @@
     let data;
     try { data = await window.API.sources.connections(); } catch { return; }
 
-    const { totalActive, totalMax, sources = [] } = data || {};
-    // Nothing to show if there are no Xtream sources reporting a max.
-    if (!sources.length || !totalMax) {
+    const sources = (data && data.sources) || [];
+    const shown = sources.filter(s => s.max != null || s.error);
+    // Connection limits are per-provider, so show each source separately rather
+    // than a meaningless cross-provider sum.
+    if (!shown.length) {
       b.style.display = 'none';
       return;
     }
 
-    b.textContent = `⇄ ${totalActive}/${totalMax}`;
     b.style.display = '';
-    // Amber when one slot left, red when at/over the limit.
-    b.classList.toggle('conn-badge--full', totalActive >= totalMax);
-    b.classList.toggle('conn-badge--warn', totalActive === totalMax - 1);
+    b.innerHTML = '⇄ ' + shown.map(s => {
+      if (s.error) return `<span class="conn-part conn-part--full" title="error">${esc(s.name)} !</span>`;
+      const cls = s.active >= s.max ? ' conn-part--full' : (s.active === s.max - 1 ? ' conn-part--warn' : '');
+      return `<span class="conn-part${cls}">${esc(s.name)} ${s.active}/${s.max}</span>`;
+    }).join('<span class="conn-sep">·</span>');
 
-    // Per-source breakdown in the tooltip.
-    b.title = sources.map(s => {
+    b.title = shown.map(s => {
       if (s.error) return `${s.name}: error (${s.error})`;
-      return `${s.name}: ${s.active ?? '?'}/${s.max ?? '?'}`;
+      return `${s.name}: ${s.active}/${s.max}` + (s.own ? ` (this box: ${s.own})` : '');
     }).join('\n');
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   // Re-check when recordings change (start/stop alters connection count),
