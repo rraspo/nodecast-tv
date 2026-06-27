@@ -39,6 +39,7 @@ router.get('/', auth.requireAuth, (req, res) => {
 });
 
 router.post('/start', auth.requireAuth, async (req, res) => {
+  let session = null;
   try {
     const repo = dbSqlite.recordings;
     const gate = canStart(repo, recordConfig);
@@ -47,7 +48,7 @@ router.post('/start', auth.requireAuth, async (req, res) => {
     const parsed = resolveStart(req.body, recordConfig);
     if (!parsed.ok) return res.status(400).json({ error: 'url and a valid mode (program|duration|manual) are required' });
 
-    const session = recordSvc.createRecordSession({
+    session = recordSvc.createRecordSession({
       url: parsed.value.url,
       userAgent: 'Mozilla/5.0',
       durationSec: parsed.value.durationSec,
@@ -73,6 +74,7 @@ router.post('/start', auth.requireAuth, async (req, res) => {
     await session.start();
     res.status(201).json({ id: session.id });
   } catch (err) {
+    if (session) recordSvc.removeSession(session.id);
     console.error('Error starting recording:', err);
     res.status(500).json({ error: err.message });
   }
