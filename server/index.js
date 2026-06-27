@@ -180,6 +180,7 @@ app.use('/api/probe', require('./routes/probe'));
 app.use('/api/subtitle', require('./routes/subtitle'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/history', require('./routes/history'));
+app.use('/api/record', require('./routes/record'));
 
 // Version endpoint
 app.get('/api/version', (req, res) => {
@@ -205,6 +206,21 @@ app.listen(PORT, async () => {
     await loadPlugins().catch(err => {
         console.error('Plugin initialization failed:', err);
     });
+
+    // Recover recordings interrupted by a restart: their ffmpeg died with us.
+    try {
+        const dbSqlite = require('./db/sqlite');
+        const { createMover } = require('./services/recordMover');
+        const { recordConfig } = require('./recordConfig');
+        const repo = dbSqlite.recordings;
+        for (const r of [...repo.listByState('recording'), ...repo.listByState('moving')]) {
+            repo.setState(r.id, 'pending-move');
+        }
+        createMover({ repo, config: recordConfig }).start();
+        console.log('[Record] Recovery complete; mover started');
+    } catch (err) {
+        console.error('[Record] Recovery failed:', err.message);
+    }
 
     // Trigger background sync with delay to allow server to settle
     setTimeout(async () => {
