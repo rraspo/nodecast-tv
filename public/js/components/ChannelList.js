@@ -1019,48 +1019,27 @@ class ChannelList {
     }
 
     showRecordMenu(anchorEl, dataset) {
-        document.querySelector('.record-menu')?.remove();
-        const url = anchorEl.dataset.recUrl;
-        const name = anchorEl.dataset.recName;
-        if (!url) { alert('No stream URL for this channel'); return; }
-
+        const channel = this.channels.find(c =>
+            c.id === dataset.channelId && String(c.sourceId) === String(dataset.sourceId)
+        );
+        const channelName = anchorEl.dataset.recName || channel?.name || '';
         const epgEndMs = this.getProgramEndMs(dataset);
         const programmeTitle = this.getProgramTitle(dataset);
 
-        const menu = document.createElement('div');
-        menu.className = 'record-menu';
-        const opts = [];
-        if (epgEndMs) opts.push(`<button data-mode="program">Record this program</button>`);
-        opts.push(`<button data-mode="duration" data-min="60">Record 60 min</button>`);
-        opts.push(`<button data-mode="duration" data-min="120">Record 120 min</button>`);
-        opts.push(`<button data-mode="manual">Record now (manual stop)</button>`);
-        menu.innerHTML = opts.join('');
+        // resolveUrl defers Xtream URL resolution until the user picks an option,
+        // which fixes the empty-URL failure for Xtream channels from the sidebar.
+        const resolveUrl = async () => {
+            if (dataset.sourceType === 'xtream' && channel) {
+                const streamFormat = window.app?.player?.settings?.streamFormat || 'm3u8';
+                const result = await API.proxy.xtream.getStreamUrl(
+                    channel.sourceId, channel.streamId, 'live', streamFormat
+                );
+                return result.url;
+            }
+            return channel?.url || '';
+        };
 
-        const rect = anchorEl.getBoundingClientRect();
-        menu.style.position = 'fixed';
-        menu.style.top = `${rect.bottom}px`;
-        menu.style.left = `${rect.left}px`;
-        document.body.appendChild(menu);
-
-        menu.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-            this.startRecording({
-                url, channelName: name, mode: b.dataset.mode,
-                durationMin: b.dataset.min ? parseInt(b.dataset.min, 10) : undefined,
-                epgEndMs: b.dataset.mode === 'program' ? epgEndMs : undefined,
-                programmeTitle: b.dataset.mode === 'program' ? programmeTitle : undefined,
-            });
-            menu.remove();
-        }));
-        setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
-    }
-
-    async startRecording(payload) {
-        try {
-            await API.record.start(payload);
-            window.dispatchEvent(new CustomEvent('recordings-changed'));
-        } catch (err) {
-            alert(err.message || 'Failed to start recording');
-        }
+        window.RecordMenu.open(anchorEl, { channelName, epgEndMs, programmeTitle, resolveUrl });
     }
 
     /**

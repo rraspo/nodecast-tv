@@ -1,0 +1,69 @@
+/**
+ * Shared record-menu helper
+ * Exposes window.RecordMenu = { open(anchorEl, ctx), start(payload) }
+ *
+ * ctx shape:
+ *   channelName   {string}          - display name for the recording
+ *   epgEndMs      {number|null}     - EPG program end time as ms timestamp, or null
+ *   programmeTitle {string|null}    - current programme title, or null
+ *   resolveUrl    {async function}  - returns the real stream URL (handles Xtream resolution)
+ */
+window.RecordMenu = {
+    /**
+     * Build and show the record dropdown anchored to anchorEl.
+     * resolveUrl() is called only when the user clicks a menu item, so Xtream URL
+     * resolution is deferred and never fires unless the user actually picks an option.
+     */
+    open(anchorEl, ctx) {
+        document.querySelector('.record-menu')?.remove();
+
+        const { channelName, epgEndMs, programmeTitle, resolveUrl } = ctx;
+
+        const menu = document.createElement('div');
+        menu.className = 'record-menu';
+
+        const opts = [];
+        if (epgEndMs) opts.push('<button data-mode="program">Record this program</button>');
+        opts.push('<button data-mode="duration" data-min="60">Record 60 min</button>');
+        opts.push('<button data-mode="duration" data-min="120">Record 120 min</button>');
+        opts.push('<button data-mode="manual">Record now (manual stop)</button>');
+        menu.innerHTML = opts.join('');
+
+        const rect = anchorEl.getBoundingClientRect();
+        menu.style.position = 'fixed';
+        menu.style.top = `${rect.bottom}px`;
+        menu.style.left = `${rect.left}px`;
+        document.body.appendChild(menu);
+
+        menu.querySelectorAll('button').forEach(b => b.addEventListener('click', async () => {
+            menu.remove();
+            let url;
+            try {
+                url = await resolveUrl();
+            } catch (err) {
+                alert('Could not resolve stream URL: ' + (err.message || err));
+                return;
+            }
+            if (!url) { alert('No stream URL for this channel'); return; }
+            await RecordMenu.start({
+                url,
+                channelName,
+                mode: b.dataset.mode,
+                durationMin: b.dataset.min ? parseInt(b.dataset.min, 10) : undefined,
+                epgEndMs: b.dataset.mode === 'program' ? epgEndMs : undefined,
+                programmeTitle: b.dataset.mode === 'program' ? programmeTitle : undefined,
+            });
+        }));
+
+        setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
+    },
+
+    async start(payload) {
+        try {
+            await API.record.start(payload);
+            window.dispatchEvent(new CustomEvent('recordings-changed'));
+        } catch (err) {
+            alert(err.message || 'Failed to start recording');
+        }
+    }
+};

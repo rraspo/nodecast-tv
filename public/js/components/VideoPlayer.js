@@ -333,6 +333,30 @@ class VideoPlayer {
             this.togglePictureInPicture();
         });
 
+        // Record button
+        const btnRecord = document.getElementById('btn-record');
+        btnRecord?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!this.currentChannel || !this.currentUrl) {
+                alert('No channel is currently playing');
+                return;
+            }
+            const epgGuide = window.app?.epgGuide;
+            const currentProgram = epgGuide?.getCurrentProgram(
+                this.currentChannel.tvgId,
+                this.currentChannel.name
+            );
+            const epgEndMs = currentProgram?.stop ? new Date(currentProgram.stop).getTime() : null;
+            const programmeTitle = currentProgram?.title || null;
+            // currentUrl is already the resolved stream URL (works for both Xtream and M3U)
+            window.RecordMenu.open(btnRecord, {
+                channelName: this.currentChannel.name,
+                epgEndMs,
+                programmeTitle,
+                resolveUrl: async () => this.currentUrl,
+            });
+        });
+
         // Overflow Menu
         const btnOverflow = document.getElementById('btn-overflow');
         const overflowMenu = document.getElementById('player-overflow-menu');
