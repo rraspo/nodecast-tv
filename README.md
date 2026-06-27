@@ -6,6 +6,12 @@
 
 nodecast-tv is a modern, web-based IPTV player featuring Live TV, EPG, Movies (VOD), and Series support. Built with performance and user experience in mind.
 
+> **Modified fork notice (GPL-3.0 §5a):** This is a modified version of
+> [technomancer702/nodecast-tv](https://github.com/technomancer702/nodecast-tv).
+> Change since 2026-06: added server-side **DVR recording** for Live TV (see
+> [`CLAUDE.md`](CLAUDE.md)). Per-change detail is in the git history. Licensed
+> under GPL-3.0, same as upstream.
+
 ## Features
 
 - **📺 Live TV**: Fast channel zapping, category grouping, and search.
