@@ -13,12 +13,26 @@
     return badge;
   }
 
-  async function refresh() {
-    let data;
-    try { data = await window.API.sources.connections(); } catch { return; }
+  async function isEnabled() {
+    try {
+      const s = await window.API.settings.get();
+      return s.showConnectionBadge !== false;
+    } catch {
+      return true; // default on if settings unavailable
+    }
+  }
 
+  async function refresh() {
     const b = getBadge();
     if (!b) return;
+
+    if (!(await isEnabled())) {
+      b.style.display = 'none';
+      return;
+    }
+
+    let data;
+    try { data = await window.API.sources.connections(); } catch { return; }
 
     const { totalActive, totalMax, sources = [] } = data || {};
     // Nothing to show if there are no Xtream sources reporting a max.
@@ -43,5 +57,6 @@
   // Re-check when recordings change (start/stop alters connection count),
   // and poll on an interval to catch playback/external changes.
   window.addEventListener('recordings-changed', refresh);
+  window.addEventListener('settings-changed', refresh);
   document.addEventListener('DOMContentLoaded', () => { refresh(); setInterval(refresh, 15000); });
 })();

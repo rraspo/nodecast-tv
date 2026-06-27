@@ -115,8 +115,31 @@ class SourceManager {
             this.renderSourceList(this.xtreamList, sources.filter(s => s.type === 'xtream'), 'xtream');
             this.renderSourceList(this.m3uList, sources.filter(s => s.type === 'm3u'), 'm3u');
             this.renderSourceList(this.epgList, sources.filter(s => s.type === 'epg'), 'epg');
+
+            this.updateXtreamConnections();
         } catch (err) {
             console.error('Error loading sources:', err);
+        }
+    }
+
+    /**
+     * Populate the per-source active/max connection counts (Xtream only).
+     */
+    async updateXtreamConnections() {
+        let data;
+        try { data = await API.sources.connections(); } catch { return; }
+        for (const s of (data.sources || [])) {
+            const el = document.querySelector(`.source-conn[data-conn-for="${s.id}"]`);
+            if (!el) continue;
+            if (s.error) {
+                el.textContent = 'Connections: unavailable';
+                el.title = s.error;
+            } else if (s.max != null) {
+                el.textContent = `Connections: ${s.active ?? '?'} / ${s.max} active`;
+                el.classList.toggle('source-conn--full', s.active != null && s.active >= s.max);
+            } else {
+                el.textContent = '';
+            }
         }
     }
 
@@ -137,6 +160,7 @@ class SourceManager {
         <div class="source-info">
           <div class="source-name">${source.name}</div>
           <div class="source-url">${source.url}</div>
+          ${type === 'xtream' ? `<div class="source-conn" data-conn-for="${source.id}"></div>` : ''}
         </div>
         <div class="source-actions">
           <button class="btn btn-sm btn-secondary" data-action="refresh" title="Refresh Data">${Icons.refresh}</button>

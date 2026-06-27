@@ -236,6 +236,17 @@ h4 {
   background: #e53935;
 }
 
+.source-conn {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #9aa0a6);
+  margin-top: 2px;
+}
+
+.source-conn--full {
+  color: #e53935;
+  font-weight: 600;
+}
+
 .navbar-menu {
   display: flex;
   gap: var(--space-xs);

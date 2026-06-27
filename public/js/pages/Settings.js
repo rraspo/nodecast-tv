@@ -77,6 +77,17 @@ class SettingsPage {
             this.app.player.saveSettings();
         });
 
+        // Connection badge toggle
+        const connectionBadgeToggle = document.getElementById('setting-connection-badge');
+        if (connectionBadgeToggle && this.app.player?.settings) {
+            connectionBadgeToggle.checked = this.app.player.settings.showConnectionBadge !== false;
+            connectionBadgeToggle.addEventListener('change', () => {
+                this.app.player.settings.showConnectionBadge = connectionBadgeToggle.checked;
+                this.app.player.saveSettings();
+                window.dispatchEvent(new CustomEvent('settings-changed'));
+            });
+        }
+
         // EPG refresh interval
         const epgRefreshSelect = document.getElementById('epg-refresh-interval');
         if (epgRefreshSelect && this.app.player?.settings) {
@@ -570,6 +581,8 @@ class SettingsPage {
             if (volumeValueDisplay) volumeValueDisplay.textContent = s.defaultVolume + '%';
             if (rememberVolumeToggle) rememberVolumeToggle.checked = s.rememberVolume;
             if (autoPlayNextToggle) autoPlayNextToggle.checked = s.autoPlayNextEpisode;
+            const connectionBadgeToggle = document.getElementById('setting-connection-badge');
+            if (connectionBadgeToggle) connectionBadgeToggle.checked = s.showConnectionBadge !== false;
             if (forceProxyToggle) forceProxyToggle.checked = s.forceProxy || false;
             if (forceTranscodeToggle) forceTranscodeToggle.checked = s.forceTranscode || false;
             if (forceRemuxToggle) forceRemuxToggle.checked = s.forceRemux || false;

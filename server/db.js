@@ -83,7 +83,9 @@ function getDefaultSettings() {
     // Upscaling settings
     upscaleEnabled: false,
     upscaleMethod: 'hardware',    // hardware | software
-    upscaleTarget: '1080p'        // 1080p | 4k | 720p
+    upscaleTarget: '1080p',        // 1080p | 4k | 720p
+    // Connection-count badge
+    showConnectionBadge: true     // show active/max provider connections in navbar
   };
 }
 
