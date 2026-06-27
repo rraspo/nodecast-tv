@@ -4886,3 +4886,15 @@ kbd {
 .rec-row-clickable { cursor: pointer; }
 .rec-row-clickable:hover { background: var(--color-bg-hover, #22222f); }
 .rec-elapsed { font-size: .8em; color: #e53935; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Recordings page sections */
+.rec-section { margin-bottom: 22px; }
+.rec-section-title { display: flex; align-items: center; gap: 8px; font-size: .95em; font-weight: 600; margin: 0 0 8px; opacity: .85; }
+.rec-section-count { font-size: .75em; font-weight: 600; padding: 1px 7px; border-radius: 10px; background: rgba(255,255,255,.1); opacity: .8; }
+.rec-section-title .btn { margin-left: auto; }
+.rec-length { font-size: .8em; opacity: .7; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rec-ts { color: #9aa0a6; background: rgba(255,255,255,.08); }
+.rec-remuxing { font-size: .8em; color: #ffb300; white-space: nowrap; }
+.rec-remux, .rec-remux-all { flex-shrink: 0; }
+.rec-row-failed { align-items: flex-start; flex-wrap: wrap; }
+.rec-error-detail { flex-basis: 100%; margin: 6px 0 0; padding: 8px 10px; border-radius: 4px; background: rgba(0,0,0,.35); color: #ef9a9a; font-size: .78em; white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto; }

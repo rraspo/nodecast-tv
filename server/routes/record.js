@@ -9,6 +9,33 @@ const { recordConfig } = require('../recordConfig');
 const dbSqlite = require('../db/sqlite');
 const recordSvc = require('../services/recordSession');
 const { createMover } = require('../services/recordMover');
+const recordFinalize = require('../services/recordFinalize');
+
+// Ids currently being remuxed in place (.ts -> .mkv) by the remux/remux-all actions.
+// Surfaced on GET /record so the UI can show a per-row "Remuxing..." state.
+const remuxing = new Set();
+
+// Remux one finished .ts recording to .mkv in place on the save path (kepler mount),
+// probe its duration, update the row, and delete the original .ts. Best-effort: logs
+// and leaves the .ts untouched on failure so nothing is lost.
+async function remuxOne(id, ffmpegPath) {
+  const repo = dbSqlite.recordings;
+  const row = repo.get(id);
+  if (!recordFinalize.isUnremuxed(row) || remuxing.has(id)) return;
+  remuxing.add(id);
+  try {
+    const dest = recordFinalize.mkvPathFor(row.save_path);
+    await recordFinalize.remuxToMkv({ ffmpegPath, src: row.save_path, dest });
+    const ms = await recordFinalize.probeDurationMs({ file: dest }).catch(() => null);
+    repo.setPaths(id, { save_path: dest });
+    if (ms) repo.setDuration(id, ms);
+    await fsp.unlink(row.save_path).catch(() => {});
+  } catch (err) {
+    console.error(`[remux] failed for ${id}: ${err.message}`);
+  } finally {
+    remuxing.delete(id);
+  }
+}
 
 const VALID_MODES = ['program', 'duration', 'manual'];
 
@@ -75,7 +102,17 @@ function getMover() {
 }
 
 router.get('/', auth.requireAuth, (req, res) => {
-  res.json(dbSqlite.recordings.list());
+  const rows = dbSqlite.recordings.list().map(r => ({ ...r, remuxing: remuxing.has(r.id) }));
+  res.json(rows);
+});
+
+// Remux all finished .ts recordings to .mkv in place. Runs in the background
+// (sequential, NFS-bound); the client polls GET /record to see rows convert.
+router.post('/remux-all', auth.requireAuth, (req, res) => {
+  const ffmpegPath = req.app.locals.ffmpegPath || 'ffmpeg';
+  const eligible = dbSqlite.recordings.list().filter(recordFinalize.isUnremuxed);
+  (async () => { for (const r of eligible) await remuxOne(r.id, ffmpegPath); })().catch(console.error);
+  res.status(202).json({ started: true, count: eligible.length });
 });
 
 router.post('/start', auth.requireAuth, async (req, res) => {
@@ -180,6 +217,16 @@ router.post('/:id/schedule-stop', auth.requireAuth, (req, res) => {
   session.scheduleStop(clamped.stopAtMs);
   repo.setStopAt(id, clamped.stopAtMs);
   return res.json({ stopAtMs: clamped.stopAtMs });
+});
+
+// Remux a single finished .ts recording to .mkv in place (background).
+router.post('/:id/remux', auth.requireAuth, (req, res) => {
+  const ffmpegPath = req.app.locals.ffmpegPath || 'ffmpeg';
+  const row = dbSqlite.recordings.get(req.params.id);
+  if (!recordFinalize.isUnremuxed(row)) return res.status(400).json({ error: 'Not an unremuxed recording' });
+  if (remuxing.has(row.id)) return res.status(409).json({ error: 'Already remuxing' });
+  remuxOne(row.id, ffmpegPath).catch(console.error);
+  res.status(202).json({ started: true });
 });
 
 router.delete('/:id', auth.requireAuth, (req, res) => {

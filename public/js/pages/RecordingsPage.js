@@ -193,24 +193,37 @@ class RecordingsPage {
         if (!this.list) return;
 
         const ACTIVE = ['recording', 'moving', 'pending-move'];
-        const active = rows.filter(r => ACTIVE.includes(r.status));
-        const rest = rows.filter(r => !ACTIVE.includes(r.status));
-        const sorted = [...active, ...rest];
+        const inProgress = rows.filter(r => ACTIVE.includes(r.status));
+        const finished = rows.filter(r => r.status === 'done' && String(r.save_path || '').endsWith('.mkv'));
+        const unremuxed = rows.filter(r => r.status === 'done' && String(r.save_path || '').endsWith('.ts'));
+        const failed = rows.filter(r => r.status === 'error');
 
-        if (sorted.length === 0) {
+        if (rows.length === 0) {
             this.list.innerHTML = '<div class="empty-state"><p>No recordings yet.</p></div>';
             return;
         }
 
         const now = Date.now();
-        const row = (r) => {
-            const name = _recEsc(r.programme_title || r.channel_name || 'Unknown');
-            const status = _recEsc(r.status || '');
-            const mode = _recEsc(r.mode || '');
-            const createdMs = _parseRecTime(r.created_at);
-            const created = !isNaN(createdMs) ? new Date(createdMs).toLocaleString() : '';
 
-            // Live elapsed timer for actively recording rows only.
+        // Shared cell builders.
+        const nameOf = (r) => _recEsc(r.programme_title || r.channel_name || 'Unknown');
+        const createdOf = (r) => {
+            const ms = _parseRecTime(r.created_at);
+            return !isNaN(ms) ? `<span class="rec-time">${_recEsc(new Date(ms).toLocaleString())}</span>` : '';
+        };
+        const lengthOf = (r) => r.duration_ms
+            ? `<span class="rec-length">&#9201; ${_fmtElapsed(r.duration_ms)}</span>` : '';
+        const modeOf = (r) => r.mode ? `<span class="rec-mode">${_recEsc(r.mode)}</span>` : '';
+        const chan = (r) => {
+            const hasChannel = !!(r.source_type && r.channel_id);
+            return hasChannel
+                ? { cls: ' rec-row-clickable', attrs: ` data-channel-id="${_recEsc(String(r.channel_id))}" data-source-id="${_recEsc(String(r.source_id || ''))}" data-source-type="${_recEsc(r.source_type)}" data-stream-id="${_recEsc(String(r.stream_id || ''))}" title="Open channel"` }
+                : { cls: '', attrs: '' };
+        };
+
+        // In-progress row: live elapsed/countdown + stop controls.
+        const progressRow = (r) => {
+            const c = chan(r);
             let elapsedHtml = '';
             if (r.status === 'recording' && r.created_at) {
                 const startMs = _parseRecTime(r.created_at);
@@ -218,13 +231,6 @@ class RecordingsPage {
                     elapsedHtml = `<span class="rec-elapsed" data-elapsed-for="${_recEsc(String(r.id))}" data-start-ms="${startMs}">● ${_fmtElapsed(now - startMs)}</span>`;
                 }
             }
-
-            // True media duration shown for finished recordings (probed by ffprobe).
-            // Live recording rows keep the elapsed ticker above — no duration yet.
-            const lengthHtml = r.duration_ms
-                ? `<span class="rec-length">&#9201; ${_fmtElapsed(r.duration_ms)}</span>`
-                : '';
-
             let stopControl = '';
             if (r.status === 'recording') {
                 const scheduledFuture = r.stop_at && r.stop_at > now;
@@ -234,24 +240,109 @@ class RecordingsPage {
                     : '';
                 stopControl = `${scheduleInfo}<button class="btn btn-sm rec-stop-toggle" data-id="${_recEsc(String(r.id))}">Stop &#9660;</button>`;
             }
-            const hasChannel = !!(r.source_type && r.channel_id);
-            const channelAttrs = hasChannel
-                ? ` data-channel-id="${_recEsc(String(r.channel_id))}" data-source-id="${_recEsc(String(r.source_id || ''))}" data-source-type="${_recEsc(r.source_type)}" data-stream-id="${_recEsc(String(r.stream_id || ''))}" title="Open channel"`
-                : '';
-            return `<div class="rec-row${hasChannel ? ' rec-row-clickable' : ''}"${channelAttrs}>
-                <span class="rec-name">${name}</span>
-                <span class="rec-badge rec-${status}">${status}</span>
-                ${elapsedHtml}
-                ${lengthHtml}
-                ${mode ? `<span class="rec-mode">${mode}</span>` : ''}
-                ${created ? `<span class="rec-time">${created}</span>` : ''}
-                ${stopControl}
+            return `<div class="rec-row${c.cls}"${c.attrs}>
+                <span class="rec-name">${nameOf(r)}</span>
+                <span class="rec-badge rec-${_recEsc(r.status)}">${_recEsc(r.status)}</span>
+                ${elapsedHtml}${lengthOf(r)}${modeOf(r)}${createdOf(r)}${stopControl}
             </div>`;
         };
 
+        // Final recording row (.mkv).
+        const finalRow = (r) => {
+            const c = chan(r);
+            return `<div class="rec-row${c.cls}"${c.attrs}>
+                <span class="rec-name">${nameOf(r)}</span>
+                ${lengthOf(r)}${modeOf(r)}${createdOf(r)}
+            </div>`;
+        };
+
+        // Unremuxed (.ts) row, with a per-row remux control.
+        const unremuxedRow = (r) => {
+            const c = chan(r);
+            const id = _recEsc(String(r.id));
+            const remuxCtl = r.remuxing
+                ? `<span class="rec-remuxing">Remuxing…</span>`
+                : `<button class="btn btn-sm rec-remux" data-id="${id}">Remux</button>`;
+            return `<div class="rec-row${c.cls}"${c.attrs}>
+                <span class="rec-name">${nameOf(r)}</span>
+                <span class="rec-badge rec-ts">.ts</span>
+                ${lengthOf(r)}${modeOf(r)}${createdOf(r)}${remuxCtl}
+            </div>`;
+        };
+
+        // Failed row, with an expandable error detail.
+        const failedRow = (r) => {
+            const id = _recEsc(String(r.id));
+            const hasError = !!r.error;
+            const detail = hasError
+                ? `<button class="btn btn-sm rec-error-toggle" data-id="${id}">Details &#9660;</button>
+                   <pre class="rec-error-detail" id="rec-err-${id}" style="display:none">${_recEsc(r.error)}</pre>`
+                : '';
+            return `<div class="rec-row rec-row-failed">
+                <span class="rec-name">${nameOf(r)}</span>
+                <span class="rec-badge rec-error">error</span>
+                ${modeOf(r)}${createdOf(r)}${detail}
+            </div>`;
+        };
+
+        const section = (title, items, rowFn, headerExtra = '') => {
+            if (!items.length) return '';
+            return `<div class="rec-section">
+                <h4 class="rec-section-title">${title} <span class="rec-section-count">${items.length}</span>${headerExtra}</h4>
+                <div class="rec-list-inner">${items.map(rowFn).join('')}</div>
+            </div>`;
+        };
+
+        const remuxAllBtn = unremuxed.some(r => !r.remuxing)
+            ? `<button class="btn btn-sm rec-remux-all">Remux all</button>` : '';
+
         this.list.innerHTML = `
             <p class="rec-page-note">Each recording uses one of your IPTV provider's connections.</p>
-            <div class="rec-list-inner">${sorted.map(row).join('')}</div>`;
+            ${section('In progress', inProgress, progressRow)}
+            ${section('Recordings', finished, finalRow)}
+            ${section('Unremuxed (.ts)', unremuxed, unremuxedRow, remuxAllBtn)}
+            ${section('Failed', failed, failedRow)}`;
+
+        this.list.querySelectorAll('.rec-remux').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                btn.disabled = true;
+                btn.textContent = 'Remuxing…';
+                try {
+                    await API.record.remux(btn.dataset.id);
+                    window.dispatchEvent(new CustomEvent('recordings-changed'));
+                } catch (err) {
+                    alert(err.message || 'Failed to remux');
+                    btn.disabled = false;
+                    btn.textContent = 'Remux';
+                }
+            });
+        });
+
+        const remuxAll = this.list.querySelector('.rec-remux-all');
+        if (remuxAll) {
+            remuxAll.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                remuxAll.disabled = true;
+                remuxAll.textContent = 'Remuxing…';
+                try {
+                    await API.record.remuxAll();
+                    window.dispatchEvent(new CustomEvent('recordings-changed'));
+                } catch (err) {
+                    alert(err.message || 'Failed to remux');
+                    remuxAll.disabled = false;
+                    remuxAll.textContent = 'Remux all';
+                }
+            });
+        }
+
+        this.list.querySelectorAll('.rec-error-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const pre = document.getElementById(`rec-err-${btn.dataset.id}`);
+                if (pre) pre.style.display = pre.style.display === 'none' ? 'block' : 'none';
+            });
+        });
 
         this.list.querySelectorAll('.rec-stop-toggle').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -276,7 +367,7 @@ class RecordingsPage {
 
         this.list.querySelectorAll('.rec-row-clickable').forEach(row => {
             row.addEventListener('click', (e) => {
-                if (e.target.closest('.rec-stop-toggle, .rec-cancel-sched')) return;
+                if (e.target.closest('.rec-stop-toggle, .rec-cancel-sched, .rec-remux, .rec-remux-all, .rec-error-toggle')) return;
                 const { channelId, sourceId, sourceType, streamId } = row.dataset;
                 try {
                     window.app.navigateTo('live');

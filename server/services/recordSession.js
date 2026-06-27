@@ -54,6 +54,13 @@ class RecordSession extends EventEmitter {
     this.error = null;
     this.process = null;
     this._stopTimer = null;
+    this.stderrTail = '';
+  }
+
+  // Keep a rolling tail of ffmpeg stderr so a failed capture can report the real reason
+  // (403, codec error, etc.) instead of just "ffmpeg exited N".
+  _appendStderr(text) {
+    this.stderrTail = (this.stderrTail + text).slice(-4000);
   }
 
   async start() {
@@ -64,13 +71,21 @@ class RecordSession extends EventEmitter {
     });
     this.process = spawn(this.ffmpegPath, args, { windowsHide: true });
     this.status = 'recording';
-    this.process.stderr.on('data', (d) => console.log(`[Record ${this.id}] ${d}`.trim()));
+    this.process.stderr.on('data', (d) => {
+      const text = d.toString();
+      this._appendStderr(text);
+      console.log(`[Record ${this.id}] ${text}`.trim());
+    });
     this.process.on('error', (err) => {
       this.status = 'error'; this.error = err.message; this.emit('error', err);
     });
     this.process.on('exit', (code) => {
       if (code === 0 || code === null || code === 255) this.status = 'stopped';
-      else { this.status = 'error'; this.error = `ffmpeg exited ${code}`; }
+      else {
+        this.status = 'error';
+        const tail = this.stderrTail.trim();
+        this.error = tail ? `ffmpeg exited ${code}\n${tail}` : `ffmpeg exited ${code}`;
+      }
       this.process = null;
       this.emit('exit', code);
     });

@@ -115,4 +115,16 @@ function probeDurationMs({ ffprobePath = 'ffprobe', file }) {
   });
 }
 
-module.exports = { mkvPathFor, buildRemuxArgs, remuxToMkv, buildProbeArgs, parseProbeDurationMs, probeDurationMs };
+/**
+ * True for a finished recording whose file is still a .ts container (a remux
+ * fallback, or a recording made before the .mkv finalize step existed).
+ * These are the rows the "Remux all" action operates on. Pure function.
+ *
+ * @param {Object} row - A recording_sessions row.
+ * @returns {boolean}
+ */
+function isUnremuxed(row) {
+  return !!row && row.status === 'done' && typeof row.save_path === 'string' && row.save_path.endsWith('.ts');
+}
+
+module.exports = { mkvPathFor, buildRemuxArgs, remuxToMkv, buildProbeArgs, parseProbeDurationMs, probeDurationMs, isUnremuxed };

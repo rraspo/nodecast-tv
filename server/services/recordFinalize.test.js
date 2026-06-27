@@ -2,7 +2,16 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { mkvPathFor, buildRemuxArgs, buildProbeArgs, parseProbeDurationMs } = require('./recordFinalize');
+const { mkvPathFor, buildRemuxArgs, buildProbeArgs, parseProbeDurationMs, isUnremuxed } = require('./recordFinalize');
+
+test('isUnremuxed: true only for done .ts recordings', () => {
+  assert.strictEqual(isUnremuxed({ status: 'done', save_path: '/r/a.ts' }), true);
+  assert.strictEqual(isUnremuxed({ status: 'done', save_path: '/r/a.mkv' }), false);
+  assert.strictEqual(isUnremuxed({ status: 'recording', save_path: '/r/a.ts' }), false);
+  assert.strictEqual(isUnremuxed({ status: 'error', save_path: '/r/a.ts' }), false);
+  assert.strictEqual(isUnremuxed(null), false);
+  assert.strictEqual(isUnremuxed({ status: 'done' }), false);
+});
 
 test('mkvPathFor: swaps .ts extension to .mkv', () => {
   assert.strictEqual(mkvPathFor('/staging/abc.ts'), '/staging/abc.mkv');

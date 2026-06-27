@@ -167,6 +167,8 @@ const API = {
         stop: (id) => API.request('DELETE', `/record/${id}`),
         list: () => API.request('GET', '/record'),
         scheduleStop: (id, stopAtMs) => API.request('POST', `/record/${id}/schedule-stop`, { stopAtMs }),
+        remux: (id) => API.request('POST', `/record/${id}/remux`),
+        remuxAll: () => API.request('POST', '/record/remux-all'),
     },
 
     // Users (admin only)
