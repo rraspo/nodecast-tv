@@ -4,6 +4,7 @@
   let panelOpen = false;
 
   function el(html) { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstChild; }
+  function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
   const pill = el(`<button id="rec-indicator" class="rec-indicator" style="display:none" title="Recordings">
     ${window.Icons?.record || '●'} <span class="rec-count">0</span></button>`);
@@ -28,7 +29,7 @@
     panel.style.display = panelOpen ? 'block' : 'none';
     if (!panelOpen) return;
     const item = (r) => `<div class="rec-row">
-      <span class="rec-name">${r.programme_title || r.channel_name}</span>
+      <span class="rec-name">${esc(r.programme_title || r.channel_name)}</span>
       <span class="rec-status rec-${r.status}">${r.status}</span>
       ${r.status === 'recording' ? `<button data-stop="${r.id}">Stop</button>` : ''}
     </div>`;

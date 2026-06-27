@@ -15,9 +15,15 @@ function canStart(repo, config) {
   return { ok: true };
 }
 
+function formatStamp(d) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+}
+
 function resolveStart(body, config = recordConfig, nowMs = Date.now()) {
   const { url, channelName, mode, durationMin, epgEndMs, programmeTitle } = body || {};
   if (!url || !VALID_MODES.includes(mode)) return { ok: false };
+  if (mode === 'program' && !Number.isFinite(epgEndMs)) return { ok: false };
   const fileBase = mode === 'program' ? (programmeTitle || channelName) : channelName;
   const durationSec = recordSvc.computeDurationSec({
     mode,
@@ -42,6 +48,9 @@ router.post('/start', auth.requireAuth, async (req, res) => {
   let session = null;
   try {
     const repo = dbSqlite.recordings;
+    // Critical section: canStart -> resolveStart -> createRecordSession -> repo.create is fully
+    // synchronous (better-sqlite3 is sync; no await until session.start()), so the max-concurrent
+    // gate is race-free and would break if the data layer became async.
     const gate = canStart(repo, recordConfig);
     if (!gate.ok) return res.status(409).json({ error: 'Max concurrent recordings reached', reason: gate.reason });
 
@@ -57,7 +66,8 @@ router.post('/start', auth.requireAuth, async (req, res) => {
       ffmpegPath: req.app.locals.ffmpegPath || 'ffmpeg',
     });
 
-    const savePath = path.join(recordConfig.savePath, `${session.fileBase}.ts`);
+    const stamp = formatStamp(new Date());
+    const savePath = path.join(recordConfig.savePath, `${session.fileBase} - ${stamp}.ts`);
     repo.create({
       id: session.id, channel_name: req.body.channelName || parsed.value.fileBase,
       programme_title: parsed.value.programmeTitle, mode: parsed.value.mode,
@@ -89,3 +99,4 @@ router.delete('/:id', auth.requireAuth, (req, res) => {
 module.exports = router;
 module.exports.canStart = canStart;
 module.exports.resolveStart = resolveStart;
+module.exports.getMover = getMover;

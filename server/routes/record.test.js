@@ -33,3 +33,15 @@ test('resolveStart: program mode uses programmeTitle for filename', () => {
   assert.strictEqual(r.value.fileBase, 'The Show');
   assert.strictEqual(r.value.durationSec, 120);
 });
+
+test('resolveStart: program mode without valid epgEndMs is rejected', () => {
+  const cfg = { defaultDurationMin: 120, epgPostPadMin: 5 };
+  assert.strictEqual(resolveStart({ url: 'u', channelName: 'Ch5', mode: 'program' }, cfg).ok, false);
+  assert.strictEqual(resolveStart({ url: 'u', channelName: 'Ch5', mode: 'program', epgEndMs: NaN }, cfg).ok, false);
+  assert.strictEqual(resolveStart({ url: 'u', channelName: 'Ch5', mode: 'program', epgEndMs: null }, cfg).ok, false);
+});
+
+test('canStart: blocked when over the concurrent limit', () => {
+  const repo = { countActive: () => 2 };
+  assert.deepStrictEqual(canStart(repo, { maxConcurrent: 1 }), { ok: false, reason: 'max-concurrent' });
+});

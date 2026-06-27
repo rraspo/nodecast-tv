@@ -210,13 +210,11 @@ app.listen(PORT, async () => {
     // Recover recordings interrupted by a restart: their ffmpeg died with us.
     try {
         const dbSqlite = require('./db/sqlite');
-        const { createMover } = require('./services/recordMover');
-        const { recordConfig } = require('./recordConfig');
         const repo = dbSqlite.recordings;
         for (const r of [...repo.listByState('recording'), ...repo.listByState('moving')]) {
             repo.setState(r.id, 'pending-move');
         }
-        createMover({ repo, config: recordConfig }).start();
+        require('./routes/record').getMover().processPending().catch(console.error);
         console.log('[Record] Recovery complete; mover started');
     } catch (err) {
         console.error('[Record] Recovery failed:', err.message);
