@@ -5,6 +5,9 @@ const { spawn } = require('child_process');
 /**
  * Returns the same path with the extension swapped from .ts to .mkv.
  * Pure function — no I/O.
+ *
+ * @param {string} tsPath - Input path assumed to end with `.ts`. Returns the path unchanged if it does not.
+ * @returns {string} Path with extension replaced.
  */
 function mkvPathFor(tsPath) {
   return tsPath.replace(/\.ts$/, '.mkv');
@@ -30,6 +33,18 @@ function buildRemuxArgs({ src, dest }) {
 /**
  * Spawns ffmpeg to remux src (.ts) to dest (.mkv) without re-encoding.
  * Resolves on exit code 0; rejects with the stderr tail otherwise.
+ *
+ * **Data-safety model:** Trusts ffmpeg exit code 0 as indicator of success.
+ * Does not verify the destination file size or stream presence post-completion;
+ * for `-c copy` IPTV remux, ffmpeg exits non-zero on meaningful failures (corrupt input,
+ * missing ffmpeg binary, output filesystem full). This is sufficient for the remux contract.
+ *
+ * @param {Object} params - Configuration object.
+ * @param {string} [params.ffmpegPath='ffmpeg'] - Path to the ffmpeg binary.
+ * @param {string} params.src - Source .ts file path.
+ * @param {string} params.dest - Destination .mkv file path.
+ * @returns {Promise<void>} Resolves on successful remux (exit 0).
+ * @throws {Error} Rejects with ffmpeg stderr tail if exit code is non-zero.
  */
 function remuxToMkv({ ffmpegPath = 'ffmpeg', src, dest }) {
   return new Promise((resolve, reject) => {

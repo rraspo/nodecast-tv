@@ -42,10 +42,14 @@ function createMover({
       const mkv = mkvPathForFn(row.staging_path);
       try {
         await remuxFn({ src: row.staging_path, dest: mkv });
-        // Success — delete the source .ts (best-effort) and advance staging_path.
-        await fsp.unlink(row.staging_path).catch(() => {});
+        // Success — persist staging_path to DB first, then delete the source .ts (best-effort).
+        // This ordering ensures crash safety: if process dies between setPaths and unlink,
+        // the next attempt sees staging_path = .mkv (idempotent retry skips remux);
+        // if it dies before setPaths, the row re-queues and remuxes the .ts again (no data loss).
+        const tsToDelete = row.staging_path;
         repo.setPaths(row.id, { staging_path: mkv });
         row.staging_path = mkv;
+        await fsp.unlink(tsToDelete).catch(() => {});
       } catch (err) {
         // DATA-SAFE FALLBACK: remux failed. Keep the .ts and deliver it instead.
         // The recording is not lost — we fall through to move the original .ts file.
