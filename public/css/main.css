@@ -4827,3 +4827,11 @@ kbd {
 .record-menu button:hover { background: rgba(255,255,255,.08); }
 .record-btn { background: none; border: none; color: inherit; cursor: pointer; opacity: .7; }
 .record-btn:hover { opacity: 1; color: #e53935; }
+
+/* Recording indicator pill + panel (Task 9) */
+.rec-indicator { position: fixed; top: 12px; right: 16px; z-index: 9998; display: inline-flex; align-items: center; gap: 6px; background: #e53935; color: #fff; border: none; border-radius: 14px; padding: 4px 10px; cursor: pointer; }
+.rec-panel { position: fixed; top: 48px; right: 16px; z-index: 9998; width: 320px; max-height: 60vh; overflow:auto; background: var(--bg-elevated,#1e1e1e); border: 1px solid var(--border,#333); border-radius: 8px; padding: 8px; }
+.rec-panel-head { padding: 6px 8px; opacity:.85; } .rec-panel-head small { opacity:.6; }
+.rec-row { display:flex; align-items:center; gap:8px; padding:6px 8px; }
+.rec-row .rec-name { flex:1; } .rec-status { font-size:.8em; opacity:.8; }
+.rec-pending-move { color:#ffb300; } .rec-empty { padding:12px; opacity:.6; }
