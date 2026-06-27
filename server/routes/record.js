@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const fsp = require('fs').promises;
 const router = express.Router();
 
 const auth = require('../auth');
@@ -9,6 +10,12 @@ const recordSvc = require('../services/recordSession');
 const { createMover } = require('../services/recordMover');
 
 const VALID_MODES = ['program', 'duration', 'manual'];
+
+// Pure helper: a session status of 'error' means ffmpeg crashed (not a manual stop or clean
+// duration finish). Used in the exit handler to decide move-vs-discard.
+function shouldMove(sessionStatus) {
+  return sessionStatus !== 'error';
+}
 
 function canStart(repo, config) {
   if (repo.countActive() >= config.maxConcurrent) return { ok: false, reason: 'max-concurrent' };
@@ -75,11 +82,30 @@ router.post('/start', auth.requireAuth, async (req, res) => {
     });
 
     session.on('exit', () => {
+      // Fix #4: only enqueue a move when the capture succeeded. A crashed capture (ffmpeg
+      // exited with a non-zero, non-255 code) produces a partial/unusable file; mark it
+      // 'error', delete the staging file (best-effort), and skip the move.
+      // Manual stop and duration auto-stop both land on status 'stopped' and are SUCCESSES —
+      // their partial/complete .ts is the intended output and must be moved normally.
+      if (!shouldMove(session.status)) {
+        repo.setState(session.id, 'error', { error: session.error || 'ffmpeg capture failed' });
+        // Remove unusable partial staging file (best-effort; ignore ENOENT if ffmpeg never
+        // created it). NOTE: do NOT delete staging files on a move error — a move-error file
+        // is a complete recording where only the destination write failed (e.g. disk full);
+        // deleting it would be data loss. Move-error files are retained for manual recovery.
+        fsp.unlink(session.stagingPath).catch(() => {});
+        recordSvc.removeSession(session.id);
+        return;
+      }
       repo.setState(session.id, 'moving');
       getMover().enqueue(session.id).catch(console.error);
       recordSvc.removeSession(session.id);
     });
-    session.on('error', (err) => repo.setState(session.id, 'error', { error: err.message }));
+    session.on('error', (err) => {
+      // Fix #5a: remove the in-memory session on spawn failure so it does not leak.
+      repo.setState(session.id, 'error', { error: err.message });
+      recordSvc.removeSession(session.id);
+    });
 
     await session.start();
     res.status(201).json({ id: session.id });
@@ -100,3 +126,4 @@ module.exports = router;
 module.exports.canStart = canStart;
 module.exports.resolveStart = resolveStart;
 module.exports.getMover = getMover;
+module.exports.shouldMove = shouldMove;

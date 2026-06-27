@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { canStart, resolveStart } = require('./record');
+const { canStart, resolveStart, shouldMove } = require('./record');
 
 test('canStart: blocked at max concurrent', () => {
   const repo = { countActive: () => 1 };
@@ -44,4 +44,12 @@ test('resolveStart: program mode without valid epgEndMs is rejected', () => {
 test('canStart: blocked when over the concurrent limit', () => {
   const repo = { countActive: () => 2 };
   assert.deepStrictEqual(canStart(repo, { maxConcurrent: 1 }), { ok: false, reason: 'max-concurrent' });
+});
+
+test('shouldMove: stopped status triggers move (clean finish or manual stop)', () => {
+  assert.strictEqual(shouldMove('stopped'), true);
+});
+
+test('shouldMove: error status skips move (ffmpeg crashed)', () => {
+  assert.strictEqual(shouldMove('error'), false);
 });
